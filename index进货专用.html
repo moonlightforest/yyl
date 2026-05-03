@@ -1,0 +1,1164 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>姚银亮专属运营决策舱 // V16.0 (Holographic UI PRO)</title>
+    
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        holo: {
+                            light: '#f8fafc',
+                            dark: '#050510'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+
+    <style>
+        body { 
+            background-color: #f8fafc; 
+            transition: background-color 0.8s ease; 
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            -webkit-font-smoothing: antialiased;
+        }
+        .dark body { background-color: #050510; }
+        
+        .custom-scrollbar::-webkit-scrollbar { width: 0px; height: 0px; }
+        .custom-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+        @keyframes aurora {
+            0% { transform: scale(1) translate(0px, 0px) rotate(0deg); }
+            33% { transform: scale(1.1) translate(6vw, -6vh) rotate(15deg); }
+            66% { transform: scale(0.9) translate(-6vw, 6vh) rotate(-15deg); }
+            100% { transform: scale(1) translate(0px, 0px) rotate(0deg); }
+        }
+        .animate-aurora { animation: aurora 25s infinite alternate ease-in-out; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useMemo, useRef, useEffect } = React;
+
+        const SEED_DATA = [
+            { name: "示例：3D立体本", cost: 0.70, category: "本子" },
+            { name: "示例：98K中性笔", cost: 0.50, category: "中性笔" },
+        ];
+
+        const SHIPPING_REGIONS = [
+            { name: "江浙沪皖", base3kg: 2.15, heavyBase: 4.50, heavyUnitPrice: 0.70 },
+            { name: "华中/华南", base3kg: 2.15, heavyBase: 4.50, heavyUnitPrice: 0.95 },
+            { name: "华北地区", base3kg: 2.15, heavyBase: 4.50, heavyUnitPrice: 0.95 },
+            { name: "西南区域", base3kg: 2.30, heavyBase: 5.00, heavyUnitPrice: 1.20 },
+            { name: "偏远地区", base3kg: 15.00, heavyBase: 25.00, heavyUnitPrice: 15.00 },
+        ];
+
+        const holoCard = "bg-gradient-to-br from-white/60 to-white/20 dark:from-slate-800/40 dark:to-slate-900/10 backdrop-blur-2xl border border-white/40 border-t-white/80 dark:border-slate-700/30 dark:border-t-slate-600/60 shadow-[0_8px_32px_rgba(0,0,0,0.06)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.4)] shadow-[inset_0_1px_1px_rgba(255,255,255,0.9)] dark:shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)] rounded-[2rem] transition-all duration-700 relative overflow-hidden";
+        const holoInput = "bg-white/40 dark:bg-black/20 backdrop-blur-xl border border-white/60 dark:border-white/10 text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:bg-white/70 dark:focus:bg-slate-800/60 focus:outline-none focus:ring-2 focus:ring-indigo-400/50 dark:focus:ring-cyan-400/50 rounded-2xl transition-all shadow-[inset_0_2px_6px_rgba(0,0,0,0.05)] dark:shadow-[inset_0_2px_6px_rgba(0,0,0,0.4)]";
+        const holoButton = "bg-gradient-to-b from-white/80 to-white/40 dark:from-white/10 dark:to-white/5 backdrop-blur-xl border border-white/80 border-b-white/40 dark:border-white/20 dark:border-t-white/30 text-indigo-700 dark:text-cyan-400 hover:bg-white/90 dark:hover:bg-white/20 hover:-translate-y-0.5 shadow-sm hover:shadow-md dark:shadow-[0_4px_15px_rgba(0,0,0,0.3)] transition-all duration-300 rounded-2xl cursor-pointer flex items-center justify-center font-bold tracking-widest";
+
+        const CornerCrosses = () => (
+            <>
+                <div className="absolute top-4 left-4 text-indigo-300/40 dark:text-cyan-400/20 font-mono text-[10px] pointer-events-none">+</div>
+                <div className="absolute top-4 right-4 text-indigo-300/40 dark:text-cyan-400/20 font-mono text-[10px] pointer-events-none">+</div>
+                <div className="absolute bottom-4 left-4 text-indigo-300/40 dark:text-cyan-400/20 font-mono text-[10px] pointer-events-none">+</div>
+                <div className="absolute bottom-4 right-4 text-indigo-300/40 dark:text-cyan-400/20 font-mono text-[10px] pointer-events-none">+</div>
+            </>
+        );
+
+        // 动态数值滚动组件
+        const AnimatedNumber = ({ value, format = (v) => v.toFixed(2), className }) => {
+            const [displayValue, setDisplayValue] = useState(value);
+            useEffect(() => {
+                let startTime = null;
+                const startValue = displayValue;
+                const distance = value - startValue;
+                const duration = 700; // 与环形进度条动画时间同步
+                if (distance === 0) return;
+                let reqId;
+                const animate = (currentTime) => {
+                    if (!startTime) startTime = currentTime;
+                    const progress = Math.min((currentTime - startTime) / duration, 1);
+                    // easeOutQuart 缓动算法
+                    const easeOutQuart = 1 - Math.pow(1 - progress, 4);
+                    setDisplayValue(startValue + distance * easeOutQuart);
+                    if (progress < 1) {
+                        reqId = requestAnimationFrame(animate);
+                    } else {
+                        setDisplayValue(value);
+                    }
+                };
+                reqId = requestAnimationFrame(animate);
+                return () => cancelAnimationFrame(reqId);
+            }, [value]);
+            return className ? <span className={className}>{format(displayValue)}</span> : <span>{format(displayValue)}</span>;
+        };
+
+        function App() {
+            const [loading, setLoading] = useState(true);
+            const [isDarkMode, setIsDarkMode] = useState(false);
+            
+            const [skus, setSkus] = useState(SEED_DATA);
+            const [selectedCategory, setSelectedCategory] = useState("全部");
+            const [selectedSku, setSelectedSku] = useState(SEED_DATA[0]);
+            const [quantity, setQuantity] = useState(10);
+            const [targetMargin, setTargetMargin] = useState(33.3);
+            const [region, setRegion] = useState(SHIPPING_REGIONS[0]);
+            const [cart, setCart] = useState([]);
+            
+            // 新增：进货单焦点索引，-1 表示未选中进货单里的任何商品
+            const [selectedCartIndex, setSelectedCartIndex] = useState(-1);
+            
+            const [activeTab, setActiveTab] = useState('simulator');
+            const [searchTerm, setSearchTerm] = useState('');
+            const [importText, setImportText] = useState('');
+            const [priceCopied, setPriceCopied] = useState(false);
+            const [quoteCopied, setQuoteCopied] = useState(false);
+            const [statusMsg, setStatusMsg] = useState({ type: null, text: '', data: null });
+            
+            const [quickAddName, setQuickAddName] = useState('');
+            const [quickAddCost, setQuickAddCost] = useState('');
+            const [quickAddCategory, setQuickAddCategory] = useState('');
+            const [editingSkuName, setEditingSkuName] = useState(null);
+            const [editingCostValue, setEditingCostValue] = useState('');
+            const [editingCategorySkuName, setEditingCategorySkuName] = useState(null);
+            
+            const [showClearConfirm, setShowClearConfirm] = useState(false);
+
+            const [queryTerm, setQueryTerm] = useState('');
+            const [queryResult, setQueryResult] = useState(null);
+            const [showQueryDropdown, setShowQueryDropdown] = useState(false);
+            const [focusedSuggestionIndex, setFocusedSuggestionIndex] = useState(-1);
+
+            const fileInputRef = useRef(null);
+            const timeoutRef = useRef(null);
+            const intervalRef = useRef(null);
+
+            const adjustMargin = (delta) => {
+                setTargetMargin(prev => {
+                    const next = parseFloat((prev + delta).toFixed(1));
+                    saveToLocal({ targetMargin: next });
+                    return next;
+                });
+            };
+
+            const stopAdjust = () => {
+                if (timeoutRef.current) clearTimeout(timeoutRef.current);
+                if (intervalRef.current) clearInterval(intervalRef.current);
+                timeoutRef.current = null;
+                intervalRef.current = null;
+            };
+
+            const startAdjust = (delta) => {
+                stopAdjust(); 
+                adjustMargin(delta); 
+                timeoutRef.current = setTimeout(() => {
+                    intervalRef.current = setInterval(() => { adjustMargin(delta); }, 50);
+                }, 400);
+            };
+
+            const querySuggestions = useMemo(() => {
+                if (!queryTerm.trim()) return [];
+                return skus.filter(s => s.name.toLowerCase().includes(queryTerm.toLowerCase()));
+            }, [queryTerm, skus]);
+
+            // 新增：全局点击空白处自动取消进货单焦点
+            useEffect(() => {
+                const handleClickOutside = (e) => {
+                    if (selectedCartIndex === -1) return; // 本来就没焦点则跳过
+                    
+                    // 识别点击的是否是目标组件内部区域
+                    const isInsideCartItem = e.target.closest('.cart-item-row');
+                    const isInsideQuickAdd = e.target.closest('.quick-add-controls');
+                    
+                    // 点击非目标区域时，瞬间释放焦点
+                    if (!isInsideCartItem && !isInsideQuickAdd) {
+                        setSelectedCartIndex(-1);
+                    }
+                };
+                document.addEventListener('mousedown', handleClickOutside);
+                return () => document.removeEventListener('mousedown', handleClickOutside);
+            }, [selectedCartIndex]);
+
+            // 安全的全局键盘焦点穿梭监听
+            useEffect(() => {
+                const handleKeyDown = (e) => {
+                    if (activeTab !== 'simulator') return;
+                    if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName)) return;
+                    if (cart.length === 0) return;
+
+                    if (e.key === 'ArrowDown') {
+                        e.preventDefault();
+                        setSelectedCartIndex(prev => {
+                            const next = prev === -1 ? 0 : (prev < cart.length - 1 ? prev + 1 : prev);
+                            setTimeout(() => document.getElementById(`cart-item-${next}`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }), 0);
+                            return next;
+                        });
+                    } else if (e.key === 'ArrowUp') {
+                        e.preventDefault();
+                        setSelectedCartIndex(prev => {
+                            const next = prev === -1 ? cart.length - 1 : (prev > 0 ? prev - 1 : 0);
+                            setTimeout(() => document.getElementById(`cart-item-${next}`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }), 0);
+                            return next;
+                        });
+                    }
+                };
+                window.addEventListener('keydown', handleKeyDown);
+                return () => window.removeEventListener('keydown', handleKeyDown);
+            }, [cart.length, activeTab]);
+
+            useEffect(() => {
+                try {
+                    const savedDark = localStorage.getItem('yao_theme_dark');
+                    if (savedDark !== null) {
+                        setIsDarkMode(savedDark === 'true');
+                    } else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+                        setIsDarkMode(true);
+                    }
+
+                    const localData = localStorage.getItem('yao_pricing_db_v2');
+                    if (localData) {
+                        const data = JSON.parse(localData);
+                        if (data.skus) setSkus(data.skus);
+                        if (data.lastCategory) setSelectedCategory(data.lastCategory);
+                        const currentSkus = data.skus || SEED_DATA;
+                        const found = currentSkus.find(s => s.name === data.lastSkuName);
+                        if (found) setSelectedSku(found);
+                        if (data.lastQuantity !== undefined) setQuantity(data.lastQuantity);
+                        if (data.targetMargin !== undefined) setTargetMargin(data.targetMargin);
+                        if (data.lastRegionName) {
+                            const r = SHIPPING_REGIONS.find(reg => reg.name === data.lastRegionName);
+                            if (r) setRegion(r);
+                        }
+                        if (data.cart) setCart(data.cart);
+                    }
+                } catch (e) {} 
+                finally { setTimeout(() => setLoading(false), 300); }
+            }, []);
+
+            useEffect(() => {
+                if (isDarkMode) document.documentElement.classList.add('dark');
+                else document.documentElement.classList.remove('dark');
+            }, [isDarkMode]);
+
+            const toggleTheme = () => {
+                setIsDarkMode(prev => {
+                    const next = !prev;
+                    localStorage.setItem('yao_theme_dark', next);
+                    return next;
+                });
+            };
+
+            const saveToLocal = (updates) => {
+                try {
+                    const current = JSON.parse(localStorage.getItem('yao_pricing_db_v2') || '{}');
+                    const newData = { ...current, skus, lastCategory: selectedCategory, lastSkuName: selectedSku?.name || "", lastQuantity: quantity, targetMargin, lastRegionName: region.name, cart, ...updates };
+                    localStorage.setItem('yao_pricing_db_v2', JSON.stringify(newData));
+                } catch (e) {}
+            };
+
+            const calculateResult = (sku, q, marginGoal, reg) => {
+                if (!sku || !q || q <= 0) return { price: 0, marginNum: 0, margin: "0%", isProfit: false, totalCost: 0, ship: 0, overhead: 0, profit: 0 };
+                const prodCost = sku.cost * q;
+                const weightKg = (35 * q) / 1000; 
+                let ship = (weightKg <= 3) ? reg.base3kg : (weightKg > 9 ? weightKg * reg.heavyUnitPrice + reg.heavyBase : Math.ceil(weightKg / 3) * reg.base3kg);
+                const fixed = 0.86; 
+                const marginDec = marginGoal / 100;
+                let calcPrice = (prodCost + ship + fixed) / (0.994 - marginDec);
+                if (calcPrice <= 0 || isNaN(calcPrice)) calcPrice = (prodCost + ship + fixed) * 1.5;
+                const fee = calcPrice * 0.006; 
+                const totalCost = prodCost + ship + fixed + fee;
+                const profit = calcPrice - totalCost;
+                const finalMarginNum = calcPrice > 0 ? (profit / calcPrice) * 100 : 0;
+                const totalOverhead = ship + fixed + fee;
+                return { price: calcPrice, marginNum: finalMarginNum, margin: finalMarginNum.toFixed(1) + "%", isProfit: profit > 0, totalCost, ship, overhead: totalOverhead, profit };
+            };
+
+            const handleQuickAddPurchase = (sku, amount) => {
+                if (!sku) return;
+                
+                setCart(prev => {
+                    let newCart;
+                    const existingIdx = prev.findIndex(item => item.sku.name === sku.name);
+                    let targetIndex = existingIdx;
+                    
+                    if (existingIdx >= 0) {
+                        newCart = prev.map((item, i) => i === existingIdx ? { ...item, qty: item.qty + amount } : item);
+                    } else {
+                        newCart = [...prev, { sku, qty: amount }];
+                        targetIndex = newCart.length - 1;
+                    }
+                    saveToLocal({ cart: newCart });
+                    
+                    // 安全同步更新焦点状态
+                    setTimeout(() => setSelectedCartIndex(targetIndex), 0);
+                    
+                    return newCart;
+                });
+                
+                setStatusMsg({ type: 'success', text: `✨ 进货单已同步：${sku.name} ${amount > 0 ? '+' + amount : '已载入'}`, data: null });
+                setTimeout(() => setStatusMsg({ type: null, text: '', data: null }), 1500);
+            };
+
+            const updateCartQty = (index, qty) => {
+                setCart(prev => {
+                    const newCart = prev.map((item, i) => i === index ? { ...item, qty: Math.max(0, qty) } : item);
+                    saveToLocal({ cart: newCart });
+                    return newCart;
+                });
+            };
+
+            const removeFromCart = (index, e) => {
+                if(e) e.stopPropagation();
+                setCart(prev => {
+                    const newCart = prev.filter((_, i) => i !== index);
+                    saveToLocal({ cart: newCart });
+                    return newCart;
+                });
+                // 删除后合理重置焦点位置
+                setSelectedCartIndex(prev => {
+                    if (prev === index) return -1;
+                    if (prev > index) return prev - 1;
+                    return prev;
+                });
+            };
+
+            const clearCart = () => {
+                setCart([]);
+                saveToLocal({ cart: [] });
+                setSelectedCartIndex(-1);
+            };
+
+            const purchaseStats = useMemo(() => {
+                if (cart.length === 0) return { totalQty: 0, totalCost: 0 };
+                const totalQty = cart.reduce((sum, item) => sum + item.qty, 0);
+                const totalCost = cart.reduce((sum, item) => sum + (item.sku.cost * item.qty), 0);
+                return { totalQty, totalCost };
+            }, [cart]);
+
+            const handleGeneratePurchaseQuotation = () => {
+                if(cart.length === 0) return;
+                
+                // 压缩富文本 HTML，防止 Excel 产生多余空列塌陷
+                let html = '<table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; width: 100%; font-family: sans-serif; text-align: center; border-color: #e5e7eb; font-size: 14px;">';
+                html += '<thead style="background-color: #f3f4f6; color: #374151;"><tr><th>序号</th><th>资产名称 / 实体标识</th><th>单价(￥)</th><th>数量(件)</th><th>小计(￥)</th></tr></thead>';
+                html += '<tbody>';
+                cart.forEach((item, idx) => {
+                    html += `<tr><td style="color: #6b7280;">${idx + 1}</td><td style="text-align: left; font-weight: bold; color: #111827;">${item.sku.name}</td><td style="color: #4b5563;">${item.sku.cost.toFixed(2)}</td><td style="font-weight: bold; color: #10b981;">${item.qty}</td><td style="color: #0284c7; font-weight: bold;">${(item.sku.cost * item.qty).toFixed(2)}</td></tr>`;
+                });
+                html += '</tbody>';
+                html += '<tfoot style="background-color: #f8fafc;">';
+                html += `<tr><td>&nbsp;</td><td>&nbsp;</td><td style="text-align: right; font-weight: bold; color: #374151;">总计应付金额：</td><td style="font-weight: bold; color: #10b981; font-size: 16px;">${purchaseStats.totalQty}</td><td style="font-weight: bold; color: #e11d48; font-size: 16px;">${purchaseStats.totalCost.toFixed(2)}</td></tr>`;
+                html += `<tr><td colspan="5" style="text-align: left; color: #9ca3af; font-size: 12px; border: none; background-color: #ffffff;">* 该进货清单由【姚银亮空间决策舱】自动导出</td></tr>`;
+                html += '</tfoot></table>';
+
+                try {
+                    const container = document.createElement('div');
+                    container.innerHTML = html;
+                    container.style.position = 'fixed';
+                    container.style.pointerEvents = 'none';
+                    container.style.opacity = '0';
+                    document.body.appendChild(container);
+
+                    const selection = window.getSelection();
+                    const range = document.createRange();
+                    range.selectNode(container.querySelector('table'));
+                    selection.removeAllRanges();
+                    selection.addRange(range);
+
+                    document.execCommand('copy');
+                    
+                    selection.removeAllRanges();
+                    document.body.removeChild(container);
+
+                    setQuoteCopied(true);
+                    setStatusMsg({ type: 'success', text: '✨ 富文本表格已提取！请在微信/Excel中直接粘贴(Ctrl+V)', data: null });
+                    setTimeout(() => {
+                        setQuoteCopied(false);
+                        setStatusMsg({ type: null, text: '', data: null });
+                    }, 3000);
+                } catch (err) {
+                    let text = "✦ 实时进货采购清单 ✦\n";
+                    cart.forEach((item, idx) => {
+                        text += `[${idx + 1}] ${item.sku.name} | 单价:￥${item.sku.cost.toFixed(2)} | 数量:${item.qty} | 小计:￥${(item.sku.cost * item.qty).toFixed(2)}\n`;
+                    });
+                    text += `✧ [总计件数] : ${purchaseStats.totalQty}件 | [应付总额] : ￥${purchaseStats.totalCost.toFixed(2)}\n`;
+                    
+                    const el = document.createElement('textarea');
+                    el.value = text;
+                    document.body.appendChild(el);
+                    el.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(el);
+                    
+                    setQuoteCopied(true);
+                    setStatusMsg({ type: 'success', text: '✨ 文本已复制 (当前环境富文本受限)', data: null });
+                    setTimeout(() => { setQuoteCopied(false); setStatusMsg({ type: null, text: '', data: null }); }, 3000);
+                }
+            };
+
+            const mainStats = useMemo(() => calculateResult(selectedSku, quantity, targetMargin, region), [selectedSku, quantity, targetMargin, region]);
+
+            const isQuickAddReady = quickAddName.trim() !== '' && quickAddCost.trim() !== '' && quickAddCategory.trim() !== '';
+
+            // 动态决定上方操作卡片显示的是搜索选中的商品，还是进货单中选中的焦点商品
+            const activeSku = (selectedCartIndex >= 0 && cart[selectedCartIndex]) ? cart[selectedCartIndex].sku : selectedSku;
+
+            const handleQuickAdd = () => {
+                if (!isQuickAddReady) return;
+                const costNum = parseFloat(quickAddCost.replace(/[^\d.]/g, ''));
+                if (isNaN(costNum)) return;
+                const newSku = { name: quickAddName, cost: costNum, category: quickAddCategory };
+                const newSkus = skus.some(s => s.name === quickAddName) ? skus.map(s => s.name === quickAddName ? newSku : s) : [...skus, newSku];
+                setSkus(newSkus); setQuickAddName(''); setQuickAddCost(''); setQuickAddCategory('');
+                saveToLocal({ skus: newSkus });
+                setStatusMsg({ type: 'success', text: `✨ 资产已录入系统：${quickAddName}`, data: null });
+                setTimeout(() => setStatusMsg({ type: null, text: '', data: null }), 2000);
+            };
+
+            const handleEditCost = () => {
+                const newCost = parseFloat(editingCostValue.replace(/[^\d.]/g, ''));
+                if (isNaN(newCost)) return;
+                const updatedSkus = skus.map(s => s.name === editingSkuName ? { ...s, cost: newCost } : s);
+                setSkus(updatedSkus);
+                if (selectedSku?.name === editingSkuName) setSelectedSku({ ...selectedSku, cost: newCost });
+                saveToLocal({ skus: updatedSkus });
+                setEditingSkuName(null);
+                setStatusMsg({ type: 'success', text: '参数已实时同步更新', data: null });
+                setTimeout(() => setStatusMsg({ type: null, text: '', data: null }), 2000);
+            };
+
+            const handleEditCategory = (skuName, newCategory) => {
+                if (!newCategory) return;
+                const updatedSkus = skus.map(s => s.name === skuName ? { ...s, category: newCategory } : s);
+                setSkus(updatedSkus);
+                if (selectedSku?.name === skuName) setSelectedSku({ ...selectedSku, category: newCategory });
+                saveToLocal({ skus: updatedSkus });
+                setEditingCategorySkuName(null);
+            };
+
+            const handleDeleteSku = (name) => {
+                const newSkus = skus.filter(s => s.name !== name);
+                setSkus(newSkus); 
+                let updates = { skus: newSkus };
+                if (selectedSku?.name === name) {
+                    const nextSku = newSkus.length > 0 ? newSkus[0] : null;
+                    setSelectedSku(nextSku);
+                    updates.lastSkuName = nextSku?.name || "";
+                }
+                saveToLocal(updates);
+            };
+
+            const handleClearAllSkus = () => {
+                setSkus([]);
+                setSelectedSku(null);
+                setCart([]); 
+                saveToLocal({ skus: [], lastSkuName: "", cart: [] });
+                setShowClearConfirm(false);
+                setStatusMsg({ type: 'success', text: '数据库已完成初始化清空', data: null });
+                setTimeout(() => setStatusMsg({ type: null, text: '', data: null }), 2000);
+            };
+
+            const handleDataProcess = (raw) => {
+                if (!raw.trim()) return;
+                const lines = raw.split(/\r?\n/).filter(l => l.trim() !== "");
+                const results = lines.map((line) => {
+                    let parts = line.includes('\t') ? line.split('\t') : (line.includes(',') ? line.split(',') : line.split(/\s{2,}/));
+                    parts = parts.map(p => p.trim()).filter(p => p !== "");
+                    if (parts.length < 2) return null;
+                    const price = parseFloat(parts[1].replace(/[^\d.]/g, ''));
+                    if (isNaN(price)) return null;
+                    return { name: parts[0], cost: price, category: parts[2] || "导入商品" };
+                }).filter(x => x);
+                if (results.length > 0) setStatusMsg({ type: 'preview', text: `扫描完成：解析到 ${results.length} 条有效记录`, data: results });
+            };
+
+            const handleBulkConfirm = () => {
+                if (!statusMsg.data) return;
+                setSkus(statusMsg.data); setSelectedSku(statusMsg.data[0]); setSelectedCategory("全部");
+                saveToLocal({ skus: statusMsg.data, lastCategory: "全部", lastSkuName: statusMsg.data[0].name });
+                setStatusMsg({ type: 'success', text: '批量导入指令执行完毕', data: null }); setImportText('');
+                setTimeout(() => { setActiveTab('library'); setStatusMsg({ type: null, text: '', data: null }); }, 1500);
+            };
+
+            const handleExportCSV = () => {
+                const BOM = '\uFEFF';
+                let csvContent = BOM + "商品编码,进价成本(￥),分类\n";
+                skus.forEach(sku => csvContent += `${sku.name},${sku.cost},${sku.category}\n`);
+                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                const link = document.createElement('a');
+                const url = URL.createObjectURL(blob);
+                const dateStr = new Date().toISOString().split('T')[0];
+                link.setAttribute('href', url);
+                link.setAttribute('download', `全息数据库备份_${dateStr}.csv`);
+                document.body.appendChild(link); link.click(); document.body.removeChild(link);
+            };
+
+            const getIndicatorStyle = (stats) => {
+                if (!stats.isProfit) return { text: 'text-rose-500 dark:text-rose-400', glow: 'shadow-[0_0_15px_rgba(244,63,94,0.6)]', bg: 'bg-rose-500', tag: '亏损预警', gradStart: '#f43f5e', gradEnd: '#be123c' };
+                if (stats.marginNum < 5) return { text: 'text-amber-500 dark:text-amber-400', glow: 'shadow-[0_0_15px_rgba(251,191,36,0.6)]', bg: 'bg-amber-500', tag: '微利状态', gradStart: '#fbbf24', gradEnd: '#d97706' };
+                return { 
+                    text: 'text-slate-700 dark:text-white', 
+                    glow: 'shadow-[0_0_15px_rgba(255,255,255,0.7)]', 
+                    bg: 'bg-white', 
+                    tag: '健康盈利', 
+                    gradStart: '#ffffff', 
+                    gradEnd: isDarkMode ? 'rgba(255,255,255,0.1)' : 'rgba(148,163,184,0.5)' 
+                };
+            };
+
+            const stratStyle = getIndicatorStyle(mainStats);
+            const categories = ["全部", ...Array.from(new Set(skus.map(s => s.category)))];
+
+            const handleCopyPrice = () => {
+                const el = document.createElement('textarea');
+                el.value = mainStats.price.toFixed(2);
+                document.body.appendChild(el);
+                el.select();
+                document.execCommand('copy');
+                document.body.removeChild(el);
+                setPriceCopied(true);
+                setTimeout(() => setPriceCopied(false), 2000);
+            };
+
+            if (loading) return (
+                <div className="min-h-screen bg-slate-50 dark:bg-[#050510] flex flex-col items-center justify-center gap-6">
+                    <div className="relative">
+                        <div className="absolute inset-0 bg-indigo-400 dark:bg-cyan-400 rounded-full blur-xl opacity-50 animate-pulse"></div>
+                        <i className="ph-bold ph-aperture ph-spin text-indigo-600 dark:text-cyan-300 text-[50px] relative z-10"></i>
+                    </div>
+                    <span className="text-slate-500 dark:text-cyan-200/70 tracking-[0.3em] text-xs uppercase animate-pulse">构建空间计算环境...</span>
+                </div>
+            );
+
+            return (
+                <div className={isDarkMode ? "dark" : ""}>
+                    <div className="min-h-screen relative font-sans antialiased text-slate-800 dark:text-slate-100 flex flex-col selection:bg-indigo-500/30 dark:selection:bg-cyan-400/30">
+                        
+                        {/* 极光/晨雾 动态背景引擎 */}
+                        <div className="fixed inset-0 z-0 overflow-hidden pointer-events-none transition-colors duration-1000">
+                            <div className="absolute top-[-10%] left-[-10%] w-[60vw] h-[60vw] rounded-full bg-blue-300/40 mix-blend-multiply filter blur-[100px] animate-aurora dark:hidden"></div>
+                            <div className="absolute bottom-[-10%] right-[-10%] w-[60vw] h-[60vw] rounded-full bg-purple-300/40 mix-blend-multiply filter blur-[120px] animate-aurora dark:hidden" style={{animationDelay: '3s'}}></div>
+                            <div className="absolute top-[20%] right-[10%] w-[40vw] h-[40vw] rounded-full bg-teal-200/40 mix-blend-multiply filter blur-[90px] animate-aurora dark:hidden" style={{animationDelay: '5s'}}></div>
+
+                            <div className="absolute top-[-10%] left-[-10%] w-[60vw] h-[60vw] rounded-full bg-indigo-600/30 mix-blend-screen filter blur-[140px] animate-aurora hidden dark:block"></div>
+                            <div className="absolute bottom-[-10%] right-[-10%] w-[60vw] h-[60vw] rounded-full bg-cyan-600/20 mix-blend-screen filter blur-[150px] animate-aurora hidden dark:block" style={{animationDelay: '4s'}}></div>
+                            <div className="absolute top-[20%] right-[10%] w-[40vw] h-[40vw] rounded-full bg-purple-600/20 mix-blend-screen filter blur-[120px] animate-aurora hidden dark:block" style={{animationDelay: '6s'}}></div>
+                        </div>
+
+                        <div className="flex flex-col min-h-screen p-2 md:p-4 max-w-6xl mx-auto w-full relative z-10">
+                            
+                            {/* 全息顶部导航 */}
+                            <header className={`${holoCard} mb-4 p-3 flex flex-col md:flex-row items-center justify-between gap-4 shrink-0`}>
+                                <div className="flex items-center gap-4 pl-4">
+                                    <div className="w-10 h-10 rounded-2xl flex items-center justify-center bg-white/60 dark:bg-white/10 border border-white/80 dark:border-white/20 text-indigo-600 dark:text-cyan-400 shadow-sm">
+                                        <i className="ph-fill ph-aperture text-[24px]"></i>
+                                    </div>
+                                    <div>
+                                        <h1 className="text-lg font-black tracking-tight text-slate-800 dark:text-white bg-clip-text text-transparent bg-gradient-to-r from-indigo-700 to-indigo-500 dark:from-cyan-300 dark:to-blue-400">姚银亮空间决策舱 <span className="text-indigo-500 dark:text-cyan-400 text-[10px] ml-1 opacity-80 font-bold">|| HOLOGRAPHIC_OS</span></h1>
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-3 pr-3">
+                                    <nav className="flex gap-2 p-1.5 bg-white/40 dark:bg-black/30 rounded-2xl border border-white/50 dark:border-white/10 shadow-inner">
+                                        {[ 
+                                            { id: 'simulator', label: '空间沙盘', icon: 'ph-cube' }, 
+                                            { id: 'library', label: '资产矩阵', icon: 'ph-database' }, 
+                                            { id: 'import', label: '终端互联', icon: 'ph-arrows-left-right' } 
+                                        ].map(tab => (
+                                            <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`px-4 py-2 text-xs font-bold tracking-widest flex items-center gap-2 transition-all rounded-xl ${activeTab === tab.id ? 'bg-white/80 dark:bg-white/20 text-indigo-700 dark:text-cyan-300 shadow-sm border border-white dark:border-white/30' : 'text-slate-500 dark:text-slate-400 hover:text-indigo-500 dark:hover:text-cyan-300'}`}>
+                                                <i className={`ph-bold ${tab.icon} text-[14px]`}></i> {tab.label}
+                                            </button>
+                                        ))}
+                                    </nav>
+                                    <button onClick={toggleTheme} className={`w-10 h-10 shrink-0 rounded-2xl flex items-center justify-center transition-all bg-white/50 dark:bg-white/10 border border-white/80 dark:border-white/20 shadow-sm hover:scale-105 hover:-translate-y-0.5 ${isDarkMode ? 'text-amber-300' : 'text-indigo-600'}`}>
+                                        <i className={`ph-fill ${isDarkMode ? 'ph-moon' : 'ph-sun'} text-[20px]`}></i>
+                                    </button>
+                                </div>
+                            </header>
+
+                            <main className="flex-1 flex flex-col min-h-0">
+                                {activeTab === 'simulator' ? (
+                                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 flex-1 items-stretch min-h-0">
+                                        
+                                        {/* 左侧参数与雷达区 */}
+                                        <div className="lg:col-span-4 flex flex-col gap-4 min-h-0">
+                                            {/* 参数配置玻璃体 */}
+                                            <section className={`${holoCard} p-5 space-y-4 shrink-0`}>
+                                                <CornerCrosses />
+                                                <div className="flex items-center gap-2 mb-2 opacity-80 border-b border-slate-200/50 dark:border-slate-700/50 pb-2">
+                                                    <i className="ph-fill ph-faders text-indigo-600 dark:text-cyan-400 text-[16px]"></i>
+                                                    <h2 className="text-[12px] font-bold text-slate-700 dark:text-cyan-100 uppercase tracking-widest">全息参数配置</h2>
+                                                </div>
+                                                <div className="space-y-4 relative z-10">
+                                                    <div className="grid grid-cols-2 gap-4">
+                                                        <div className="space-y-1.5">
+                                                            <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 ml-1 uppercase tracking-widest">所属分类</label>
+                                                            <select className={`w-full px-3 py-2 text-xs font-bold ${holoInput}`} onChange={(e) => { 
+                                                                const newCat = e.target.value; setSelectedCategory(newCat); 
+                                                                const filteredSkus = newCat === "全部" ? skus : skus.filter(s => s.category === newCat);
+                                                                let nextSku = selectedSku;
+                                                                if (!filteredSkus.find(s => s.name === selectedSku?.name)) { nextSku = filteredSkus.length > 0 ? filteredSkus[0] : null; setSelectedSku(nextSku); }
+                                                                saveToLocal({ lastCategory: newCat, lastSkuName: nextSku?.name || "" }); 
+                                                            }} value={selectedCategory}>
+                                                                {categories.map(cat => <option key={cat} value={cat} className="bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100">{cat}</option>)}
+                                                            </select>
+                                                        </div>
+                                                        <div className="space-y-1.5 relative">
+                                                            <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 ml-1 uppercase tracking-widest">资产编码</label>
+                                                            <span className="absolute right-2 top-0 text-[10px] font-bold text-indigo-600 dark:text-cyan-400">￥{selectedSku?.cost?.toFixed(2) || "0.00"}</span>
+                                                            <select className={`w-full px-3 py-2 text-xs font-bold ${holoInput}`} onChange={(e) => { const s = skus.find(x => x.name === e.target.value); setSelectedSku(s || skus[0]); saveToLocal({ lastSkuName: s?.name || "" }); }} value={selectedSku?.name || ""}>
+                                                                {(selectedCategory === "全部" ? skus : skus.filter(s => s.category === selectedCategory)).map((sku, i) => <option key={i} value={sku.name} className="bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100">{sku.name}</option>)}
+                                                            </select>
+                                                        </div>
+                                                    </div>
+                                                    <div className="space-y-1.5 bg-white/30 dark:bg-black/20 border border-white/50 dark:border-white/5 p-3 rounded-2xl shadow-inner relative">
+                                                        <label className="text-[10px] font-bold text-indigo-700 dark:text-cyan-300 uppercase tracking-widest ml-1">目标净利润率阀值</label>
+                                                        <div className="flex items-center gap-3 w-full mt-2">
+                                                            <button 
+                                                                className={`w-12 h-10 shrink-0 flex items-center justify-center text-lg ${holoButton} select-none`}
+                                                                style={{ touchAction: 'none', WebkitUserSelect: 'none' }}
+                                                                onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); startAdjust(-0.5); }}
+                                                                onPointerUp={(e) => { e.currentTarget.releasePointerCapture(e.pointerId); stopAdjust(); }}
+                                                                onPointerLeave={stopAdjust}
+                                                                onPointerCancel={stopAdjust}
+                                                                onContextMenu={(e) => e.preventDefault()}
+                                                            ><i className="ph-bold ph-minus pointer-events-none"></i></button>
+                                                            
+                                                            <div className="relative flex-1">
+                                                                <input type="number" step="0.1" className={`w-full px-3 py-2 text-lg font-black text-center ${holoInput} !border-none !bg-white/60 dark:!bg-white/10 text-indigo-700 dark:text-cyan-300`} value={targetMargin} onChange={(e) => { const v = parseFloat(e.target.value) || 0; setTargetMargin(v); saveToLocal({ targetMargin: v }); }} onKeyDown={(e) => e.key === 'Enter' && e.target.blur()} />
+                                                                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm pointer-events-none">%</span>
+                                                            </div>
+
+                                                            <button 
+                                                                className={`w-12 h-10 shrink-0 flex items-center justify-center text-lg ${holoButton} select-none`}
+                                                                style={{ touchAction: 'none', WebkitUserSelect: 'none' }}
+                                                                onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); startAdjust(0.5); }}
+                                                                onPointerUp={(e) => { e.currentTarget.releasePointerCapture(e.pointerId); stopAdjust(); }}
+                                                                onPointerLeave={stopAdjust}
+                                                                onPointerCancel={stopAdjust}
+                                                                onContextMenu={(e) => e.preventDefault()}
+                                                            ><i className="ph-bold ph-plus pointer-events-none"></i></button>
+                                                        </div>
+                                                    </div>
+                                                    <div className="grid grid-cols-2 gap-4">
+                                                        <div className="space-y-1.5">
+                                                            <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 ml-1 uppercase tracking-widest">基准件数</label>
+                                                            <input type="number" className={`w-full px-3 py-2.5 text-xs font-bold text-center ${holoInput}`} value={quantity} onChange={(e) => { const v = parseInt(e.target.value) || 0; setQuantity(v); saveToLocal({ lastQuantity: v }); }} onKeyDown={(e) => e.key === 'Enter' && e.target.blur()} />
+                                                        </div>
+                                                        <div className="space-y-1.5">
+                                                            <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 ml-1 uppercase tracking-widest">目标物流区域</label>
+                                                            <select className={`w-full px-3 py-2.5 text-[11px] font-bold ${holoInput}`} onChange={(e) => { const r = SHIPPING_REGIONS.find(x => x.name === e.target.value); setRegion(r || SHIPPING_REGIONS[0]); saveToLocal({ lastRegionName: (r || SHIPPING_REGIONS[0]).name }); }} value={region.name}>
+                                                                {SHIPPING_REGIONS.map(r => <option key={r.name} value={r.name} className="bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100">{r.name}</option>)}
+                                                            </select>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </section>
+
+                                            {/* 全息雷达仪表盘 */}
+                                            <section className={`flex-1 flex flex-col min-h-0 ${holoCard} p-5 overflow-hidden`}>
+                                                <CornerCrosses />
+                                                <div className="flex items-center justify-between mb-2 relative z-10">
+                                                    <div className="flex items-center gap-2 opacity-80">
+                                                        <i className={`ph-fill ph-radar text-[16px] ${stratStyle.text}`}></i>
+                                                        <h3 className={`text-[12px] font-bold uppercase tracking-widest ${stratStyle.text}`}>预测雷达分析</h3>
+                                                    </div>
+                                                    <div className={`flex items-center gap-2 px-3 py-1 rounded-xl bg-white/50 dark:bg-black/30 border border-white/60 dark:border-white/10 shadow-inner`}>
+                                                        <div className={`w-2 h-2 rounded-full ${stratStyle.bg} ${stratStyle.glow} animate-pulse`}></div>
+                                                        <span className={`text-[10px] font-bold ${stratStyle.text}`}>{stratStyle.tag}</span>
+                                                    </div>
+                                                </div>
+                                                
+                                                <div className="flex-1 flex flex-col justify-between items-center relative z-10">
+                                                    {(() => {
+                                                        const radius = 38; const circumference = 2 * Math.PI * radius;
+                                                        const displayPercent = Math.min(100, Math.max(0, mainStats.marginNum));
+                                                        const offset = circumference - (displayPercent / 100) * circumference;
+                                                        const trackColor = isDarkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)';
+
+                                                        return (
+                                                            <div className="flex w-full items-center justify-around shrink-0 px-2 my-3">
+                                                                {/* 流光渐变水晶进度环 */}
+                                                                <div className="relative flex items-center justify-center p-3">
+                                                                    <svg className="transform -rotate-90 w-[110px] h-[110px] relative z-10 drop-shadow-lg" viewBox="0 0 100 100">
+                                                                        <defs>
+                                                                            <linearGradient id="ringGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                                                                                <stop offset="0%" stopColor={stratStyle.gradStart} />
+                                                                                <stop offset="100%" stopColor={stratStyle.gradEnd} />
+                                                                            </linearGradient>
+                                                                            <radialGradient id="glassFill" cx="30%" cy="30%" r="70%">
+                                                                                <stop offset="0%" stopColor={isDarkMode ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.9)'} />
+                                                                                <stop offset="100%" stopColor={isDarkMode ? 'rgba(255,255,255,0.01)' : 'rgba(255,255,255,0.3)'} />
+                                                                            </radialGradient>
+                                                                            
+                                                                            {/* 核心科技：磨砂颗粒感滤镜引擎 */}
+                                                                            <filter id="frosted-grain" x="-20%" y="-20%" width="140%" height="140%">
+                                                                                {/* 1. 生成高频白噪音 (沙粒感) */}
+                                                                                <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="3" result="noise" />
+                                                                                {/* 2. 增强噪点亮度并控制透明度 (白霜化) */}
+                                                                                <feColorMatrix type="matrix" values="1 0 0 0 1   0 1 0 0 1   0 0 1 0 1   0 0 0 0.45 0" in="noise" result="coloredNoise" />
+                                                                                {/* 3. 蒙版遮罩：让颗粒只附着在进度条线条内部 */}
+                                                                                <feComposite operator="in" in="coloredNoise" in2="SourceGraphic" result="textured" />
+                                                                                {/* 4. 混合叠加：将颗粒感与渐变原色完美融合 */}
+                                                                                <feBlend mode="screen" in="textured" in2="SourceGraphic" />
+                                                                            </filter>
+                                                                        </defs>
+                                                                        {/* 水晶透镜内填 */}
+                                                                        <circle cx="50" cy="50" r={radius - 6} fill="url(#glassFill)" />
+                                                                        <circle cx="50" cy="50" r={radius} fill="transparent" stroke={trackColor} strokeWidth="12" />
+                                                                        {/* 进度条：动态条件触发颗粒滤镜 */}
+                                                                        <circle 
+                                                                            cx="50" cy="50" r={radius} 
+                                                                            fill="transparent" 
+                                                                            stroke="url(#ringGrad)" 
+                                                                            strokeWidth="12" 
+                                                                            strokeDasharray={circumference} 
+                                                                            strokeDashoffset={offset} 
+                                                                            strokeLinecap="round" 
+                                                                            className="transition-all duration-700 ease-out"
+                                                                            filter={mainStats.marginNum >= 5 ? "url(#frosted-grain)" : ""} 
+                                                                        />
+                                                                    </svg>
+                                                                    <div className="absolute inset-0 flex flex-col items-center justify-center z-20">
+                                                                        <AnimatedNumber value={mainStats.marginNum} format={v => v.toFixed(1) + '%'} className={`text-xl font-black ${stratStyle.text} drop-shadow-sm`} />
+                                                                        <span className={`text-[9px] font-bold uppercase opacity-70 ${stratStyle.text} mt-0.5 drop-shadow-sm`}>空间利润率</span>
+                                                                    </div>
+                                                                </div>
+
+                                                                {/* 晶体单笔赚 */}
+                                                                <div className="relative flex flex-col items-center justify-center p-6 w-[110px] h-[110px] bg-gradient-to-br from-white/70 to-white/10 dark:from-white/10 dark:to-transparent backdrop-blur-xl border border-white/80 border-t-white/100 dark:border-white/20 dark:border-t-white/30 rounded-full shadow-lg shadow-black/5 dark:shadow-black/40">
+                                                                    <span className="text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400 tracking-widest mb-1">单笔净利润</span>
+                                                                    <span className={`text-2xl font-black ${mainStats.profit > 0 ? 'text-emerald-500 dark:text-emerald-400' : stratStyle.text} flex items-baseline drop-shadow-md`}>
+                                                                        <span className="text-xs mr-0.5">￥</span>
+                                                                        <AnimatedNumber value={mainStats.profit} format={v => Math.abs(v) < 0.01 && v < 0 ? "0.00" : v.toFixed(2)} />
+                                                                    </span>
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })()}
+
+                                                    <div className="w-full flex gap-4 mt-2">
+                                                        <div className="flex-1 bg-white/30 dark:bg-black/20 border border-white/50 dark:border-white/5 rounded-2xl flex flex-col p-3 relative overflow-hidden shadow-inner">
+                                                            <div className="flex-1 flex items-center justify-center">
+                                                                <p className="text-[10px] font-bold tracking-wider text-center text-slate-600 dark:text-slate-400 leading-tight px-1">各种包装，快递，扣点支出</p>
+                                                            </div>
+                                                            <div className="w-full h-[1px] bg-gradient-to-r from-transparent via-slate-300 dark:via-slate-600 to-transparent my-1"></div>
+                                                            <div className="flex-1 flex flex-col items-center justify-center">
+                                                                <p className="text-sm font-black text-indigo-700 dark:text-cyan-300 flex items-center gap-1.5 drop-shadow-sm">
+                                                                    <i className="ph-fill ph-package"></i> ￥<AnimatedNumber value={mainStats.overhead} format={v => v.toFixed(2)} />
+                                                                </p>
+                                                            </div>
+                                                        </div>
+                                                        <div className="flex-[1.2] bg-gradient-to-br from-white/60 to-white/20 dark:from-white/10 dark:to-white/5 border border-white/80 border-t-white/100 dark:border-white/20 dark:border-t-white/30 rounded-2xl shadow-[0_8px_16px_rgba(0,0,0,0.05)] dark:shadow-[0_8px_16px_rgba(0,0,0,0.3)] flex flex-col items-center justify-center p-3 gap-2 relative overflow-hidden group">
+                                                            <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-400/20 dark:bg-cyan-400/20 rounded-full filter blur-2xl transform translate-x-1/2 -translate-y-1/2 pointer-events-none"></div>
+                                                            <AnimatedNumber value={mainStats.price} format={v => v.toFixed(2)} className="text-[36px] leading-tight font-black text-transparent bg-clip-text bg-gradient-to-br from-indigo-700 to-violet-500 dark:from-cyan-300 dark:to-blue-500 text-center tracking-tight px-1 w-full break-words relative z-10 drop-shadow-sm" />
+                                                            <button 
+                                                                onClick={handleCopyPrice} 
+                                                                className={`px-3 py-1.5 bg-white/50 dark:bg-black/40 border ${priceCopied ? 'border-emerald-400 text-emerald-600 dark:text-emerald-400' : 'border-white/60 dark:border-white/10 text-indigo-600 dark:text-cyan-400 hover:bg-white/80 dark:hover:bg-white/20 hover:-translate-y-0.5'} rounded-xl flex items-center justify-center transition-all gap-1.5 font-bold tracking-widest text-[10px] relative z-10 shadow-sm`}
+                                                            >
+                                                                <i className={`ph-bold ${priceCopied ? 'ph-check' : 'ph-copy'} text-[12px]`}></i>
+                                                                <span>{priceCopied ? '数据已提取' : '提取最终售价'}</span>
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </section>
+                                        </div>
+
+                                        {/* 右侧沙盘核心区 */}
+                                        <div className="lg:col-span-8 flex flex-col gap-4 min-h-0">
+                                            {/* 全息检索栏 */}
+                                            <div className={`${holoCard} p-4 flex flex-col md:flex-row items-center gap-4 shrink-0 relative z-30 !overflow-visible`}>
+                                                <div className="flex-1 relative w-full">
+                                                    <div className="relative">
+                                                        <input 
+                                                            type="text" 
+                                                            placeholder="输入资产编码或名称检索全息库..." 
+                                                            value={queryTerm}
+                                                            onChange={(e) => {
+                                                                setQueryTerm(e.target.value);
+                                                                setShowQueryDropdown(true);
+                                                                setFocusedSuggestionIndex(-1);
+                                                                setSelectedCartIndex(-1); // 输入搜索时自动清除进货单焦点
+                                                                if (e.target.value.trim() === '') setQueryResult(null);
+                                                            }}
+                                                            onFocus={() => {
+                                                                setShowQueryDropdown(true);
+                                                                setSelectedCartIndex(-1); // 重新获取焦点时清除进货单焦点
+                                                            }}
+                                                            onBlur={() => setTimeout(() => setShowQueryDropdown(false), 200)}
+                                                            onKeyDown={(e) => {
+                                                                if (e.key === 'ArrowDown') { e.preventDefault(); setFocusedSuggestionIndex(prev => { const next = prev < querySuggestions.length - 1 ? prev + 1 : prev; setTimeout(() => document.getElementById(`suggestion-item-${next}`)?.scrollIntoView({ block: 'nearest' }), 0); return next; }); } 
+                                                                else if (e.key === 'ArrowUp') { e.preventDefault(); setFocusedSuggestionIndex(prev => { const next = prev > 0 ? prev - 1 : -1; if (next >= 0) setTimeout(() => document.getElementById(`suggestion-item-${next}`)?.scrollIntoView({ block: 'nearest' }), 0); return next; }); } 
+                                                                else if (e.key === 'Enter') { 
+                                                                    e.preventDefault(); 
+                                                                    if (focusedSuggestionIndex >= 0 && focusedSuggestionIndex < querySuggestions.length) { setQueryTerm(querySuggestions[focusedSuggestionIndex].name); setQueryResult(querySuggestions[focusedSuggestionIndex]); setSelectedSku(querySuggestions[focusedSuggestionIndex]); setSelectedCategory(querySuggestions[focusedSuggestionIndex].category); setShowQueryDropdown(false); setSelectedCartIndex(-1); e.target.blur(); } 
+                                                                    else if (querySuggestions.length > 0) { setQueryTerm(querySuggestions[0].name); setQueryResult(querySuggestions[0]); setSelectedSku(querySuggestions[0]); setSelectedCategory(querySuggestions[0].category); setShowQueryDropdown(false); setSelectedCartIndex(-1); e.target.blur(); } 
+                                                                }
+                                                            }}
+                                                            className={`w-full pl-12 pr-4 py-2.5 text-sm font-bold ${holoInput}`}
+                                                        />
+                                                        <div className="absolute left-4 top-1/2 -translate-y-1/2 w-6 h-6 flex items-center justify-center text-indigo-500 dark:text-cyan-400 opacity-70"><i className="ph-bold ph-magnifying-glass text-[16px]"></i></div>
+                                                    </div>
+                                                    
+                                                    {showQueryDropdown && queryTerm.trim() !== '' && (
+                                                        <div className="absolute top-[calc(100%+12px)] left-0 right-0 bg-white/80 dark:bg-slate-800/90 backdrop-blur-2xl border border-white/60 dark:border-white/10 shadow-[0_15px_35px_rgba(0,0,0,0.1)] dark:shadow-[0_15px_35px_rgba(0,0,0,0.5)] z-50 max-h-64 overflow-y-auto custom-scrollbar rounded-2xl p-2">
+                                                            {querySuggestions.length > 0 ? (
+                                                                querySuggestions.map((sku, i) => (
+                                                                    <div id={`suggestion-item-${i}`} key={i} className={`px-4 py-3 cursor-pointer flex justify-between items-center rounded-xl transition-all ${focusedSuggestionIndex === i ? 'bg-indigo-50 dark:bg-white/10' : 'hover:bg-black/5 dark:hover:bg-white/5'}`} onMouseEnter={() => setFocusedSuggestionIndex(i)} onClick={() => { setQueryTerm(sku.name); setQueryResult(sku); setSelectedSku(sku); setSelectedCategory(sku.category); setShowQueryDropdown(false); setSelectedCartIndex(-1); }}>
+                                                                        <span className={`text-sm font-bold ${focusedSuggestionIndex === i ? 'text-indigo-600 dark:text-cyan-300' : 'text-slate-700 dark:text-slate-200'}`}>{sku.name}</span>
+                                                                        <span className="text-[10px] font-bold text-indigo-600 dark:text-cyan-400 bg-indigo-100/50 dark:bg-cyan-900/40 px-2 py-1 rounded-lg shadow-sm">{sku.category}</span>
+                                                                    </div>
+                                                                ))
+                                                            ) : ( <div className="px-4 py-4 text-center text-xs font-bold text-slate-400">错误：未检索到对应资产记录</div> )}
+                                                        </div>
+                                                    )}
+                                                </div>
+
+                                                <div className="flex items-center gap-4 w-full md:w-auto min-w-[320px]">
+                                                    <div className="h-10 w-px bg-gradient-to-b from-transparent via-slate-300 dark:via-slate-600 to-transparent hidden md:block"></div>
+                                                    <div className="flex flex-col gap-2 w-full animate-in zoom-in-95 duration-300">
+                                                        <div className="flex gap-3 w-full items-stretch">
+                                                            <div className="flex-1 bg-white/50 dark:bg-white/5 border border-white/60 dark:border-white/10 rounded-2xl py-2 px-3 flex flex-col justify-center items-center shadow-sm relative overflow-hidden transition-colors duration-300">
+                                                                <div className={`absolute top-0 left-0 w-1 h-full ${selectedCartIndex >= 0 ? 'bg-amber-400' : 'bg-emerald-400'}`}></div>
+                                                                <span className="text-[9px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-0.5">{selectedCartIndex >= 0 ? "单品基准值(焦点)" : "资产基准值"}</span>
+                                                                <span className="text-sm font-black text-slate-800 dark:text-slate-100">￥{activeSku?.cost?.toFixed(2) || "0.00"}</span>
+                                                            </div>
+                                                            <div className="flex-1 bg-white/50 dark:bg-white/5 border border-white/60 dark:border-white/10 rounded-2xl py-2 px-3 flex flex-col justify-center items-center shadow-sm relative overflow-hidden transition-colors duration-300">
+                                                                <div className="absolute top-0 left-0 w-1 h-full bg-indigo-400 dark:bg-cyan-400"></div>
+                                                                <span className="text-[9px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-0.5">{selectedCartIndex >= 0 ? "资产类型(焦点)" : "资产类型"}</span>
+                                                                <span className="text-xs font-bold text-indigo-600 dark:text-cyan-400 truncate w-full text-center mt-1">{activeSku?.category || "-"}</span>
+                                                            </div>
+                                                            <button onClick={() => handleQuickAddPurchase(activeSku, 0)} className={`w-12 shrink-0 flex items-center justify-center ${holoButton}`} title="载入进货单">
+                                                                <i className={`ph-bold ${selectedCartIndex >= 0 ? 'ph-check' : 'ph-plus'} text-[20px]`}></i>
+                                                            </button>
+                                                        </div>
+                                                        <div className="flex items-center justify-end w-full gap-1.5 mt-0.5 pr-0.5 quick-add-controls">
+                                                            <span className={`text-[9px] font-bold uppercase tracking-widest mr-1 transition-colors ${selectedCartIndex >= 0 ? 'text-indigo-500 dark:text-cyan-400 animate-pulse' : 'text-slate-400 dark:text-slate-500'}`}>
+                                                                {selectedCartIndex >= 0 ? '加码单品' : '快捷加码'}
+                                                            </span>
+                                                            {[10, 50, 100, 500, 1000].map(num => (
+                                                                <button key={num} onClick={() => activeSku && handleQuickAddPurchase(activeSku, num)} className={`px-2 py-1 text-[10px] font-black rounded-lg transition-all shadow-sm flex items-center justify-center active:scale-95 ${selectedCartIndex >= 0 ? 'bg-indigo-500 text-white dark:bg-cyan-500 dark:text-slate-900 border-transparent hover:bg-indigo-600 hover:-translate-y-0.5' : 'text-indigo-600 dark:text-cyan-400 bg-white/60 dark:bg-white/10 hover:bg-white dark:hover:bg-white/20 border border-white/80 dark:border-white/10 hover:-translate-y-0.5'}`}>
+                                                                    <span className="opacity-60 font-normal mr-[1px]">+</span>{num}
+                                                                </button>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* 进货价格计算系统 */}
+                                            <div className={`${holoCard} p-5 overflow-hidden flex flex-col flex-1 min-h-0`}>
+                                                <CornerCrosses />
+                                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-3 shrink-0 pl-2 border-b border-slate-200/50 dark:border-slate-700/50 pb-3 relative z-10">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="w-8 h-8 flex items-center justify-center bg-white/60 dark:bg-white/10 border border-white/80 dark:border-white/20 rounded-xl text-indigo-600 dark:text-cyan-400 shadow-sm">
+                                                            <i className="ph-fill ph-shopping-cart text-[18px]"></i>
+                                                        </div>
+                                                        <h3 className="text-base font-black tracking-tight text-slate-800 dark:text-white">智能进货价格计算系统</h3>
+                                                    </div>
+                                                    {cart.length > 0 && (
+                                                        <button onClick={clearCart} className="px-4 py-1.5 bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/30 text-rose-500 hover:bg-rose-100 dark:hover:bg-rose-500/20 hover:-translate-y-0.5 transition-all font-bold text-xs rounded-xl flex items-center gap-2 uppercase tracking-widest shadow-sm">
+                                                            <i className="ph-bold ph-trash"></i> 清空进货单
+                                                        </button>
+                                                    )}
+                                                </div>
+
+                                                <div className="flex-1 flex flex-col gap-4 min-h-0 relative z-10">
+                                                    {/* 进货单资产流 */}
+                                                    <div className="flex-1 overflow-y-auto custom-scrollbar bg-white/20 dark:bg-black/20 border border-white/40 dark:border-white/5 rounded-2xl p-3 relative min-h-[120px] shadow-inner">
+                                                        {cart.length === 0 ? (
+                                                            <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 gap-3">
+                                                                <i className="ph-fill ph-haze text-4xl opacity-50 animate-pulse"></i>
+                                                                <span className="text-xs font-bold tracking-widest uppercase">进货单内尚未载入资产</span>
+                                                            </div>
+                                                        ) : (
+                                                            <div className="space-y-3 pb-2">
+                                                                {cart.map((item, idx) => (
+                                                                    <div 
+                                                                        id={`cart-item-${idx}`} 
+                                                                        key={idx} 
+                                                                        onClick={() => setSelectedCartIndex(idx)}
+                                                                        className={`cart-item-row flex items-center justify-between p-3 rounded-xl transition-all shadow-sm group cursor-pointer
+                                                                            ${selectedCartIndex === idx 
+                                                                                ? 'bg-indigo-50/90 dark:bg-cyan-900/40 border border-indigo-400 dark:border-cyan-500 ring-2 ring-indigo-400/30 dark:ring-cyan-500/30 transform scale-[1.01]' 
+                                                                                : 'bg-gradient-to-r from-white/60 to-white/30 dark:from-white/10 dark:to-white/5 border border-white/80 border-t-white/100 dark:border-white/10 hover:border-indigo-300 dark:hover:border-cyan-500/50 hover:shadow-md hover:-translate-y-0.5'
+                                                                            }
+                                                                        `}
+                                                                    >
+                                                                        <div className="flex flex-col truncate pl-2 pr-3 flex-1">
+                                                                            <span className={`text-sm font-bold truncate drop-shadow-sm ${selectedCartIndex === idx ? 'text-indigo-700 dark:text-cyan-300' : 'text-slate-800 dark:text-slate-100'}`}>{item.sku.name}</span>
+                                                                            <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 mt-1 tracking-widest">
+                                                                                ￥{item.sku.cost.toFixed(2)} × {item.qty} = <span className={`${selectedCartIndex === idx ? 'text-indigo-700 dark:text-cyan-300' : 'text-indigo-600 dark:text-cyan-400'} font-black`}>￥{(item.sku.cost * item.qty).toFixed(2)}</span>
+                                                                            </span>
+                                                                        </div>
+                                                                        <div className="flex items-center gap-3 shrink-0">
+                                                                            <input 
+                                                                                type="number" 
+                                                                                value={item.qty} 
+                                                                                onFocus={() => setSelectedCartIndex(idx)}
+                                                                                onChange={(e)=>updateCartQty(idx, parseInt(e.target.value)||0)} 
+                                                                                className={`w-16 px-2 py-1.5 text-xs font-black text-center text-indigo-600 dark:text-cyan-300 ${holoInput} ${selectedCartIndex === idx ? 'ring-2 ring-indigo-400/50 dark:ring-cyan-400/50' : ''}`} 
+                                                                            />
+                                                                            <button onClick={(e)=>removeFromCart(idx, e)} className="w-8 h-8 text-rose-400 hover:text-rose-500 bg-white/50 dark:bg-black/30 border border-white/80 dark:border-white/10 hover:border-rose-300 dark:hover:border-rose-500/50 rounded-xl transition-all flex items-center justify-center shadow-sm hover:scale-105"><i className="ph-bold ph-trash-simple text-[14px]"></i></button>
+                                                                        </div>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        )}
+                                                    </div>
+
+                                                    {/* 进货结果统计 */}
+                                                    <div className="shrink-0 flex flex-col gap-4">
+                                                        <div className="grid grid-cols-2 gap-4">
+                                                            <div className="bg-white/40 dark:bg-white/5 border border-white/60 dark:border-white/10 p-3 rounded-2xl flex flex-col items-center justify-center shadow-sm">
+                                                                <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">总计采购件数</span>
+                                                                <span className="text-sm font-black text-slate-800 dark:text-white mt-1 drop-shadow-sm">{purchaseStats.totalQty} 件</span>
+                                                            </div>
+                                                            <div className="bg-white/40 dark:bg-white/5 border border-white/60 dark:border-white/10 p-3 rounded-2xl flex flex-col items-center justify-center shadow-sm relative overflow-hidden">
+                                                                <div className="absolute top-0 left-0 w-full h-1 bg-indigo-500 dark:bg-cyan-400"></div>
+                                                                <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">预测应付总额(纯进货)</span>
+                                                                <span className="text-sm font-black mt-1 drop-shadow-sm text-indigo-600 dark:text-cyan-400">￥{purchaseStats.totalCost.toFixed(2)}</span>
+                                                            </div>
+                                                        </div>
+
+                                                        <div className="bg-gradient-to-r from-white/70 to-white/40 dark:from-white/10 dark:to-white/5 border border-white/80 border-t-white/100 dark:border-white/20 p-5 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-5 shadow-[0_8px_20px_rgba(0,0,0,0.08)] dark:shadow-[0_8px_20px_rgba(0,0,0,0.4)] relative overflow-hidden">
+                                                            <div className="absolute top-0 right-0 w-40 h-40 bg-indigo-300/30 dark:bg-cyan-500/20 rounded-full filter blur-3xl transform translate-x-1/2 -translate-y-1/2 pointer-events-none"></div>
+                                                            <div className="flex flex-col relative z-10">
+                                                                <span className="text-[11px] font-bold text-indigo-600 dark:text-cyan-400 uppercase tracking-widest mb-1.5 flex items-center gap-1.5"><i className="ph-fill ph-wallet"></i> 实时进货应付总额</span>
+                                                                <p className="text-[40px] leading-none font-black text-transparent bg-clip-text bg-gradient-to-r from-indigo-700 to-indigo-400 dark:from-cyan-300 dark:to-blue-400 tracking-tight break-words drop-shadow-sm">
+                                                                    ￥<AnimatedNumber value={purchaseStats.totalCost} format={v => v.toFixed(2)} />
+                                                                </p>
+                                                            </div>
+                                                            <button onClick={handleGeneratePurchaseQuotation} className={`shrink-0 px-6 py-3.5 rounded-xl flex items-center justify-center gap-2 font-bold tracking-widest uppercase transition-all shadow-md hover:shadow-lg relative z-10 ${quoteCopied ? 'bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-300 dark:border-emerald-500/50 text-emerald-600 dark:text-emerald-400' : holoButton}`}>
+                                                                <i className={`ph-bold ${quoteCopied ? 'ph-check' : 'ph-table'} text-[18px]`}></i>
+                                                                <span className="text-xs">{quoteCopied ? '富文本表格已提取' : '一键复制表格清单'}</span>
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ) : activeTab === 'library' ? (
+                                    <div className="animate-in slide-in-from-bottom-6 duration-700 space-y-4 flex-1 flex flex-col">
+                                        {/* 单品快速录入 */}
+                                        <section className={`${holoCard} p-6 shrink-0`}>
+                                            <CornerCrosses />
+                                            <div className="flex items-center gap-3 border-b border-slate-200/50 dark:border-slate-700/50 pb-3 mb-4 relative z-10">
+                                                <div className="w-8 h-8 rounded-xl bg-white/60 dark:bg-white/10 border border-white/80 dark:border-white/20 flex items-center justify-center text-indigo-600 dark:text-cyan-400 shadow-sm"><i className="ph-fill ph-plus text-[16px]"></i></div>
+                                                <h2 className="text-sm font-black tracking-widest uppercase">新资产实体注册</h2>
+                                            </div>
+                                            <div className="flex flex-col gap-4 relative z-10">
+                                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                                    <div className="space-y-1.5">
+                                                        <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest ml-1">资产编码 / 名称</label>
+                                                        <input id="input-sku-name" type="text" className={`w-full px-4 py-2.5 text-sm font-bold ${holoInput}`} placeholder="如：3D流沙减压本" value={quickAddName} onChange={(e) => setQuickAddName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && document.getElementById('input-sku-cost').focus()} />
+                                                    </div>
+                                                    <div className="space-y-1.5">
+                                                        <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest ml-1">资产基准值(￥)</label>
+                                                        <input id="input-sku-cost" type="text" className={`w-full px-4 py-2.5 text-sm font-bold ${holoInput}`} placeholder="0.00" value={quickAddCost} onChange={(e) => setQuickAddCost(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { const catInput = document.getElementById('input-sku-category'); if (catInput) catInput.focus(); } }} />
+                                                    </div>
+                                                    <div className="space-y-1.5">
+                                                        <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest ml-1">归属矩阵分类</label>
+                                                        <select id="input-sku-category" className={`w-full px-4 py-2.5 text-sm font-bold cursor-pointer ${holoInput}`} value={quickAddCategory} onChange={(e) => setQuickAddCategory(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleQuickAdd()}>
+                                                            <option value="" disabled hidden>选择分类节点...</option>
+                                                            {categories.filter(c => c !== "全部").map(cat => <option key={cat} value={cat} className="bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100">{cat}</option>)}
+                                                            {!categories.includes("其它") && <option value="其它" className="bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100">其它</option>}
+                                                        </select>
+                                                    </div>
+                                                </div>
+                                                <div className="flex justify-end">
+                                                    <button onClick={handleQuickAdd} className={`px-6 py-2.5 text-xs flex items-center gap-2 ${isQuickAddReady ? holoButton : 'bg-white/30 dark:bg-white/5 border border-white/40 dark:border-white/5 text-slate-400 opacity-50 cursor-not-allowed rounded-2xl'}`}>
+                                                        <i className="ph-bold ph-paper-plane-tilt text-[16px]"></i> 提交资产至矩阵
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            {statusMsg.type === 'success' && <p className="mt-3 text-indigo-600 dark:text-cyan-300 text-[11px] font-bold uppercase tracking-widest flex items-center gap-2 relative z-10"><i className="ph-bold ph-sparkle text-[16px] animate-pulse"></i> {statusMsg.text}</p>}
+                                        </section>
+                                        
+                                        {/* 仓库清单 */}
+                                        <div className={`${holoCard} overflow-hidden flex-1 flex flex-col min-h-0`}>
+                                            <div className="p-4 md:px-6 flex flex-col md:flex-row justify-between items-center gap-4 border-b border-white/40 dark:border-white/5 bg-white/30 dark:bg-black/20">
+                                                <div className="flex items-center justify-between w-full md:w-auto gap-5">
+                                                    <div className="flex items-center gap-3 text-slate-800 dark:text-white font-black uppercase text-sm tracking-widest drop-shadow-sm">
+                                                        <div className="w-10 h-10 rounded-2xl bg-white/80 dark:bg-white/10 border border-white/100 dark:border-white/20 flex items-center justify-center text-indigo-600 dark:text-cyan-400 shadow-md">
+                                                            <i className="ph-fill ph-hard-drives text-[20px]"></i>
+                                                        </div>
+                                                        全息资产数据矩阵
+                                                    </div>
+                                                    {skus.length > 0 && (
+                                                        <button onClick={() => setShowClearConfirm(true)} className="px-3 py-1.5 bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/30 text-rose-500 hover:bg-rose-100 dark:hover:bg-rose-500/20 font-bold text-[10px] uppercase tracking-widest transition-colors rounded-xl flex items-center gap-1.5 shadow-sm hover:-translate-y-0.5">
+                                                            <i className="ph-bold ph-warning-circle text-[14px]"></i> 格式化数据库
+                                                        </button>
+                                                    )}
+                                                </div>
+                                                <div className="relative w-full md:w-80">
+                                                    <input type="text" placeholder="全局搜索资产池..." className={`w-full px-5 py-2.5 text-xs font-bold pl-12 ${holoInput}`} value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && e.target.blur()} />
+                                                    <div className="absolute left-4 top-1/2 -translate-y-1/2 flex items-center justify-center text-slate-400"><i className="ph-bold ph-magnifying-glass text-[16px]"></i></div>
+                                                </div>
+                                            </div>
+                                            <div className="overflow-y-auto flex-1 custom-scrollbar min-h-[200px] max-h-[350px] lg:max-h-[450px] p-2">
+                                                <table className="w-full text-left">
+                                                    <thead className="sticky top-0 bg-white/80 dark:bg-[#0b0f19]/90 backdrop-blur-xl z-10 shadow-[0_4px_15px_rgba(0,0,0,0.03)] dark:shadow-[0_4px_15px_rgba(0,0,0,0.4)] rounded-xl">
+                                                        <tr className="text-slate-500 dark:text-slate-400 font-bold text-[10px] uppercase tracking-widest">
+                                                            <th className="px-6 py-4 rounded-tl-xl border-b border-slate-200 dark:border-slate-800">资产名称 / 实体标识</th>
+                                                            <th className="px-6 py-4 text-center border-b border-slate-200 dark:border-slate-800">矩阵分类</th>
+                                                            <th className="px-6 py-4 text-center border-b border-slate-200 dark:border-slate-800">基准成本(￥)</th>
+                                                            <th className="px-6 py-4 text-right rounded-tr-xl border-b border-slate-200 dark:border-slate-800">管理操作</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody className="text-sm">
+                                                        {skus.filter(s => s.name.toLowerCase().includes(searchTerm.toLowerCase())).map((sku, idx) => (
+                                                            <tr key={idx} className="group hover:bg-white/60 dark:hover:bg-white/10 border-b border-transparent hover:border-white/80 dark:hover:border-white/20 transition-all rounded-2xl hover:shadow-sm">
+                                                                <td className="px-6 py-4 font-black text-slate-800 dark:text-slate-100 group-hover:text-indigo-600 dark:group-hover:text-cyan-300 transition-colors rounded-l-2xl">{sku.name}</td>
+                                                                <td className="px-6 py-4 text-center">
+                                                                    {editingCategorySkuName === sku.name ? (
+                                                                        <select autoFocus className={`w-full max-w-[120px] px-2 py-1.5 text-xs font-bold text-center ${holoInput}`} value={sku.category} onChange={(e) => handleEditCategory(sku.name, e.target.value)} onBlur={() => setEditingCategorySkuName(null)} onKeyDown={(e) => e.key === 'Escape' && setEditingCategorySkuName(null)}>
+                                                                            {categories.filter(c => c !== "全部").map(cat => <option key={cat} value={cat} className="bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100">{cat}</option>)}
+                                                                            {!categories.includes("其它") && <option value="其它" className="bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100">其它</option>}
+                                                                        </select>
+                                                                    ) : (
+                                                                        <div className="flex items-center justify-center gap-2 group/cat cursor-pointer" onClick={() => setEditingCategorySkuName(sku.name)}>
+                                                                            <span className="px-3 py-1 bg-white/80 dark:bg-white/10 border border-white/100 dark:border-white/20 shadow-sm rounded-xl text-[10px] font-bold text-indigo-600 dark:text-cyan-300 group-hover/cat:scale-105 transition-all">{sku.category}</span>
+                                                                            <i className="ph-bold ph-pencil-simple text-[12px] text-slate-400 opacity-0 group-hover/cat:opacity-100 transition-opacity"></i>
+                                                                        </div>
+                                                                    )}
+                                                                </td>
+                                                                <td className="px-6 py-4 text-center">
+                                                                    {editingSkuName === sku.name ? (
+                                                                        <div className="flex items-center justify-center gap-2 animate-in zoom-in-95">
+                                                                            <input type="text" className={`w-20 px-2 py-1.5 text-xs font-black text-center text-indigo-600 dark:text-cyan-300 ${holoInput}`} value={editingCostValue} onChange={(e) => setEditingCostValue(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleEditCost()} autoFocus />
+                                                                            <button onClick={handleEditCost} className="p-1.5 bg-indigo-50 dark:bg-cyan-500/10 border border-indigo-200 dark:border-cyan-500/30 text-indigo-600 dark:text-cyan-400 hover:scale-105 rounded-lg shadow-sm transition-all"><i className="ph-bold ph-check text-[14px]"></i></button>
+                                                                            <button onClick={() => setEditingSkuName(null)} className="p-1.5 bg-white/50 dark:bg-white/10 border border-white/80 dark:border-white/20 text-slate-500 hover:scale-105 rounded-lg shadow-sm transition-all"><i className="ph-bold ph-x text-[14px]"></i></button>
+                                                                        </div>
+                                                                    ) : (
+                                                                        <div className="flex items-center justify-center gap-2 group/cost cursor-pointer" onClick={() => { setEditingSkuName(sku.name); setEditingCostValue(sku.cost.toString()); }}>
+                                                                            <span className="text-base font-black text-indigo-600 dark:text-cyan-300 drop-shadow-sm">￥{sku.cost.toFixed(2)}</span>
+                                                                            <i className="ph-bold ph-pencil-simple text-[12px] text-slate-400 opacity-0 group-hover/cost:opacity-100 transition-opacity"></i>
+                                                                        </div>
+                                                                    )}
+                                                                </td>
+                                                                <td className="px-6 py-4 text-right rounded-r-2xl">
+                                                                    <div className="flex justify-end items-center gap-4">
+                                                                        <button onClick={() => { setSelectedCategory(sku.category); setSelectedSku(sku); setActiveTab('simulator'); }} className={`${holoButton} px-3 py-1.5 text-[10px] opacity-0 group-hover:opacity-100`}>切换至进货计算</button>
+                                                                        <button onClick={() => handleDeleteSku(sku.name)} className="w-8 h-8 rounded-xl bg-white/80 dark:bg-white/5 border border-white/100 dark:border-white/10 text-rose-400 hover:text-rose-600 hover:bg-white dark:hover:bg-white/20 hover:border-rose-300 dark:hover:border-rose-500/50 shadow-sm transition-all opacity-0 group-hover:opacity-100 flex items-center justify-center hover:-translate-y-0.5"><i className="ph-bold ph-trash text-[16px]"></i></button>
+                                                                    </div>
+                                                                </td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div className="max-w-4xl mx-auto animate-in zoom-in-95 duration-700 w-full h-full overflow-y-auto custom-scrollbar pb-4 pr-2">
+                                        <div className={`${holoCard} p-6 flex flex-col items-center mt-5`}>
+                                            <CornerCrosses />
+                                            <div className="flex items-center gap-4 mb-5 w-full border-b border-slate-200/50 dark:border-slate-700/50 pb-4 relative z-10">
+                                                <div className="w-12 h-12 rounded-2xl bg-white/60 dark:bg-white/10 border border-white/80 dark:border-white/20 flex items-center justify-center text-indigo-600 dark:text-cyan-400 shadow-md">
+                                                    <i className="ph-fill ph-plugs-connected text-[24px]"></i>
+                                                </div>
+                                                <div><h2 className="text-lg font-black text-slate-800 dark:text-white tracking-widest uppercase">全息资产批量注入节点</h2><p className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-widest mt-0.5">Multi-Source Asset Sync</p></div>
+                                            </div>
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4 w-full relative z-10">
+                                                <button onClick={() => fileInputRef.current?.click()} className={`${holoButton} flex-col gap-3 p-6 h-full !border-dashed border-2 hover:bg-white/80 dark:hover:bg-white/10 group`}>
+                                                    <div className="w-12 h-12 rounded-full bg-indigo-50 dark:bg-cyan-900/30 border border-indigo-100 dark:border-cyan-800/50 flex items-center justify-center text-indigo-600 dark:text-cyan-400 mb-1 shadow-inner group-hover:scale-110 transition-transform"><i className="ph-bold ph-file-csv text-[24px]"></i></div>
+                                                    <p className="text-[11px] font-black uppercase tracking-widest text-slate-600 dark:text-cyan-100">选取终端实体文件 (.CSV/.TXT)</p>
+                                                    <input type="file" accept=".csv,.txt" className="hidden" ref={fileInputRef} onChange={(e) => {
+                                                        const file = e.target.files?.[0]; if (file) { const reader = new FileReader(); reader.onload = (ev) => handleDataProcess(ev.target?.result); reader.readAsText(file); }
+                                                    }} />
+                                                </button>
+                                                <div className="p-5 bg-white/40 dark:bg-black/20 border border-white/60 dark:border-white/10 rounded-2xl shadow-[inset_0_2px_10px_rgba(0,0,0,0.02)] dark:shadow-[inset_0_2px_10px_rgba(0,0,0,0.2)] flex flex-col justify-center space-y-3 relative overflow-hidden">
+                                                    <h3 className="font-bold text-indigo-700 dark:text-cyan-300 text-[10px] uppercase tracking-[0.2em] flex items-center gap-2"><i className="ph-fill ph-info text-[14px]"></i> 解析协议与格式标准</h3>
+                                                    <div className="space-y-2 text-[11px] font-bold text-slate-600 dark:text-slate-300">
+                                                        <p className="flex justify-between border-b border-white/40 dark:border-white/5 pb-1"><span>向量 01</span> <span className="text-indigo-600 dark:text-cyan-400 bg-white/50 dark:bg-white/10 px-2 rounded shadow-sm">资产全局编码 (必填)</span></p>
+                                                        <p className="flex justify-between border-b border-white/40 dark:border-white/5 pb-1"><span>向量 02</span> <span className="text-indigo-600 dark:text-cyan-400 bg-white/50 dark:bg-white/10 px-2 rounded shadow-sm">基准流转成本 (必填)</span></p>
+                                                        <p className="flex justify-between"><span>向量 03</span> <span className="text-slate-400 dark:text-slate-500 italic">所属矩阵节点 (选填)</span></p>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <textarea className={`w-full h-24 p-4 text-xs font-mono mb-4 ${holoInput} relative z-10`} placeholder="或在此处直接映射外部二维表格流数据..." value={importText} onChange={(e) => { setImportText(e.target.value); handleDataProcess(e.target.value); }} />
+                                            {statusMsg.type === 'preview' && (
+                                                <div className="p-4 bg-emerald-50/90 dark:bg-emerald-900/30 border border-emerald-300 dark:border-emerald-500/50 rounded-2xl w-full animate-in slide-in-from-top-4 flex flex-col items-center gap-3 shadow-[0_8px_20px_rgba(16,185,129,0.15)] relative z-10">
+                                                    <div className="text-emerald-600 dark:text-emerald-400 font-bold text-xs uppercase tracking-widest flex items-center gap-2 drop-shadow-sm"><i className="ph-fill ph-check-circle text-[18px]"></i> {statusMsg.text}</div>
+                                                    <button onClick={handleBulkConfirm} className={`w-full py-3 bg-gradient-to-r from-emerald-500 to-teal-400 text-white hover:opacity-90 border border-emerald-400 rounded-xl font-black text-sm flex items-center justify-center gap-2 tracking-widest transition-all shadow-lg hover:-translate-y-0.5`}><i className="ph-bold ph-arrows-clockwise text-[16px]"></i> 执行覆盖与重组程序</button>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        <div className={`${holoCard} p-6 flex flex-col items-center mt-5`}>
+                                            <div className="flex items-center gap-4 mb-4 w-full border-b border-slate-200/50 dark:border-slate-700/50 pb-4">
+                                                <div className="w-12 h-12 rounded-2xl bg-white/60 dark:bg-white/10 border border-white/80 dark:border-white/20 flex items-center justify-center text-slate-600 dark:text-cyan-100 shadow-md">
+                                                    <i className="ph-fill ph-export text-[24px]"></i>
+                                                </div>
+                                                <div><h2 className="text-lg font-black text-slate-800 dark:text-white tracking-widest uppercase">全息资产实体导出节点</h2><p className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-widest mt-0.5">Export Database</p></div>
+                                            </div>
+                                            <div className="w-full p-5 bg-white/40 dark:bg-black/20 border border-white/60 dark:border-white/10 rounded-2xl shadow-[inset_0_2px_10px_rgba(0,0,0,0.02)] dark:shadow-[inset_0_2px_10px_rgba(0,0,0,0.2)] flex flex-col sm:flex-row items-center justify-between gap-5">
+                                                <div>
+                                                    <h3 className="font-bold text-xs text-slate-600 dark:text-slate-300 uppercase tracking-widest">矩阵内驻留实体总数: <span className="text-indigo-600 dark:text-cyan-400 text-2xl ml-2 font-black drop-shadow-sm">{skus.length}</span></h3>
+                                                </div>
+                                                <button onClick={handleExportCSV} className={`${holoButton} shrink-0 px-6 py-3 flex items-center gap-2 text-[11px]`}>
+                                                    <i className="ph-bold ph-download-simple text-[16px]"></i> 生成外部离线快照 (CSV)
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                            </main>
+
+                            {/* 空间全息警告弹窗 */}
+                            {showClearConfirm && (
+                                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/30 dark:bg-black/60 backdrop-blur-xl p-4 animate-in fade-in duration-300">
+                                    <div className={`${holoCard} p-8 max-w-sm w-full flex flex-col items-center text-center !border-rose-300 dark:!border-rose-500/50 shadow-[0_20px_60px_rgba(244,63,94,0.15)] dark:shadow-[0_20px_60px_rgba(244,63,94,0.4)]`}>
+                                        <div className="w-16 h-16 rounded-full bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/30 flex items-center justify-center text-rose-500 mb-5 shadow-inner">
+                                            <i className="ph-fill ph-warning-octagon text-[32px] animate-pulse drop-shadow-sm"></i>
+                                        </div>
+                                        <h3 className="text-base font-black text-slate-800 dark:text-white mb-3 tracking-widest uppercase">底层格式化警告</h3>
+                                        <p className="text-xs text-slate-600 dark:text-slate-300 mb-8 font-bold leading-relaxed px-2 bg-white/50 dark:bg-black/40 p-4 rounded-xl border border-white/80 dark:border-white/10 shadow-inner">
+                                            正在请求：格式化全息矩阵数据库。<br/>所有资产实体记录将被彻底解构销毁。<br/>不可逆转。是否继续授权？
+                                        </p>
+                                        <div className="flex w-full gap-4">
+                                            <button onClick={() => setShowClearConfirm(false)} className={`${holoButton} flex-1 py-3 text-xs`}>
+                                                中止授权
+                                            </button>
+                                            <button onClick={handleClearAllSkus} className={`flex-1 py-3 font-black text-xs tracking-widest uppercase bg-gradient-to-r from-rose-500 to-rose-600 text-white hover:opacity-90 border border-rose-600 rounded-2xl transition-all shadow-lg hover:-translate-y-0.5`}>
+                                                确认解构销毁
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            <footer className="mt-5 py-4 flex flex-col sm:flex-row justify-between items-center gap-3 shrink-0 border-t border-white/40 dark:border-white/10">
+                                <div className="flex items-center gap-6 text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">
+                                    <div className="flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_#10b981] animate-pulse"></div> 物理加密</div>
+                                    <div className="flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-indigo-500 dark:bg-cyan-400 shadow-[0_0_8px_currentColor] animate-pulse"></div> 状态保存</div>
+                                </div>
+                                <p className="text-slate-400 dark:text-slate-500 text-[9px] font-bold uppercase tracking-widest drop-shadow-sm">E-COMMERCE SPATIAL CORE // V16.0 PRO</p>
+                            </footer>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
