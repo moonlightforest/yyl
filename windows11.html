@@ -163,6 +163,9 @@
             // 右键菜单状态
             const [contextMenu, setContextMenu] = useState({ visible: false, x: 0, y: 0, listId: null });
 
+            // [新增] 悬浮备注提示状态
+            const [remarkTooltip, setRemarkTooltip] = useState({ visible: false, x: 0, y: 0, text: '' });
+
             const fileInputRef = useRef(null);
 
             // 数据持久化初始化
@@ -545,7 +548,17 @@
                         </div>
                     )}
 
-                    {/* 左侧侧边栏 (Sidebar) */}
+                    {/* [新增] 全局悬浮备注提示 (实时跟随鼠标) */}
+                    {remarkTooltip.visible && remarkTooltip.text && (
+                        <div 
+                            className="fixed z-[1000] bg-gray-900/95 dark:bg-white/95 backdrop-blur-sm text-white dark:text-gray-900 px-3 py-2 rounded-md shadow-xl text-[12px] max-w-xs break-words pointer-events-none"
+                            style={{ top: remarkTooltip.y + 15, left: remarkTooltip.x + 15 }}
+                        >
+                            {remarkTooltip.text}
+                        </div>
+                    )}
+
+                    {/* 左侧侧边栏 (Sidebar) 窄化至 200px */}
                     <aside className="w-[200px] bg-white/40 dark:bg-black/40 backdrop-blur-3xl border-r border-black/5 dark:border-white/5 flex flex-col z-20 shadow-lg shrink-0">
                         <div className="p-5 flex items-center gap-2.5">
                             <div className="w-7 h-7 bg-win-accent dark:bg-win-accentDark rounded-md flex items-center justify-center text-white dark:text-gray-900 shadow-md shrink-0">
@@ -1024,7 +1037,16 @@
                                                             <td className="px-6 py-3.5 text-right font-bold text-gray-900 dark:text-gray-100">
                                                                 ￥{(item.sku.cost * item.currentOwedQty).toFixed(2)}
                                                             </td>
-                                                            <td className="px-6 py-3.5">
+                                                            <td 
+                                                                className="px-6 py-3.5"
+                                                                onMouseEnter={(e) => {
+                                                                    if (item.remark) setRemarkTooltip({ visible: true, x: e.clientX, y: e.clientY, text: item.remark });
+                                                                }}
+                                                                onMouseMove={(e) => {
+                                                                    if (item.remark && remarkTooltip.visible) setRemarkTooltip(prev => ({ ...prev, x: e.clientX, y: e.clientY }));
+                                                                }}
+                                                                onMouseLeave={() => setRemarkTooltip({ visible: false, x: 0, y: 0, text: '' })}
+                                                            >
                                                                 <input 
                                                                     key={`rem-${item.listId}-${item.itemIndex}-${item.remark}`}
                                                                     defaultValue={item.remark}
