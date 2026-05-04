@@ -32,25 +32,33 @@
     <script src="https://unpkg.com/@phosphor-icons/web"></script>
 
     <style>
-        /* 终极杀招：彻底锁死底层物理视口，杜绝 iOS 任何形式的越界白边或黑边 */
-        html, body, #root { 
+        /* 终极杀招：将背景色直接注入到最底层的 html 节点，确保 iOS 安全区永远不会漏白边 */
+        html {
+            background-color: #f8fafc;
+        }
+        html.dark {
+            background-color: #050510;
+        }
+
+        /* 彻底锁死物理视口，钉死在屏幕四角 */
+        body, #root { 
             margin: 0;
             padding: 0;
             width: 100vw;
             height: 100vh;
+            height: 100dvh; /* 优先使用动态视口高度 */
             position: fixed; 
             top: 0;
             left: 0;
+            right: 0;
+            bottom: 0;
             overflow: hidden;
-            background-color: #f8fafc; /* 匹配明亮模式底色，填补任何可能的缝隙 */
+            background-color: transparent;
             font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             -webkit-font-smoothing: antialiased;
             -webkit-tap-highlight-color: transparent;
             touch-action: manipulation;
         }
-        
-        /* 暗黑模式下底层彻底转黑 */
-        html.dark, html.dark body, html.dark #root { background-color: #050510 !important; }
         
         .custom-scrollbar::-webkit-scrollbar { display: none; }
         .custom-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
@@ -161,10 +169,6 @@
             
             const [libraryDisplayCount, setLibraryDisplayCount] = useState(20);
 
-            // AI 分析状态
-            const [aiAdvice, setAiAdvice] = useState('');
-            const [isAnalyzing, setIsAnalyzing] = useState(false);
-
             const fileInputRef = useRef(null);
 
             useEffect(() => {
@@ -186,6 +190,7 @@
                 finally { setTimeout(() => setLoading(false), 300); }
             }, []);
 
+            // 在切换暗色模式时，也同步切换 html 根标签的样式
             useEffect(() => {
                 if (isDarkMode) {
                     document.documentElement.classList.add('dark');
@@ -236,8 +241,6 @@
                     saveToLocal({ cart: newCart });
                     return newCart;
                 });
-                // 清理 AI 缓存，由于进货单变动
-                setAiAdvice('');
                 setStatusMsg({ type: 'success', text: amount > 0 ? `已加码 +${amount}` : '资产已载入' });
                 setTimeout(() => setStatusMsg({ type: null, text: '' }), 1000);
             };
@@ -247,7 +250,6 @@
                     const next = prev.map((item, i) => i === idx ? { ...item, qty: Math.max(0, qty) } : item);
                     saveToLocal({ cart: next }); return next;
                 });
-                setAiAdvice('');
             };
 
             const removeFromCart = (index, e) => {
@@ -258,10 +260,9 @@
                     return newCart;
                 });
                 setSelectedCartIndex(-1);
-                setAiAdvice('');
             };
 
-            const clearCart = () => { setCart([]); saveToLocal({ cart: [] }); setSelectedCartIndex(-1); setAiAdvice(''); };
+            const clearCart = () => { setCart([]); saveToLocal({ cart: [] }); setSelectedCartIndex(-1); };
 
             const purchaseStats = useMemo(() => {
                 if (cart.length === 0) return { totalQty: 0, totalCost: 0 };
@@ -269,48 +270,6 @@
                 const totalCost = cart.reduce((sum, item) => sum + (item.sku.cost * item.qty), 0);
                 return { totalQty, totalCost };
             }, [cart]);
-
-            // Gemini API 智能分析调用逻辑
-            const handleAIAnalyze = async () => {
-                if (cart.length === 0) return;
-                setIsAnalyzing(true);
-                setAiAdvice('');
-                try {
-                    const apiKey = ""; // 执行环境会自动注入
-                    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
-                    
-                    let cartStr = cart.map(item => `- ${item.sku.name}: ${item.qty}件 (进价￥${item.sku.cost.toFixed(2)})`).join('\n');
-                    const userQuery = `请帮我分析以下进货单数据，总金额￥${purchaseStats.totalCost.toFixed(2)}，总件数${purchaseStats.totalQty}。\n\n进货明细：\n${cartStr}\n\n请给出专业、简练的采购建议和利润优化方向。`;
-                    
-                    const payload = {
-                        contents: [{ parts: [{ text: userQuery }] }],
-                        systemInstruction: { parts: [{ text: "你是一个专业的零售进货分析专家，语气简练、专业、有洞察力。不要使用markdown格式，请用平白连贯的中文回答，字数控制在150字以内。" }] }
-                    };
-
-                    let retries = 3;
-                    let delay = 1000;
-                    let response = null;
-                    while(retries > 0) {
-                        try {
-                            response = await fetch(url, { method: 'POST', body: JSON.stringify(payload), headers: { 'Content-Type': 'application/json' }});
-                            if (response.ok) break;
-                        } catch (e) {}
-                        retries--;
-                        await new Promise(r => setTimeout(r, delay));
-                        delay *= 2;
-                    }
-
-                    if (!response || !response.ok) throw new Error("API Error");
-                    const data = await response.json();
-                    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "分析接口未返回有效建议。";
-                    setAiAdvice(text);
-                } catch (err) {
-                    console.error("AI 接口调用失败:", err);
-                    setAiAdvice('网络链接波动，量子分析接口暂时不可用，请稍后再试。');
-                } finally {
-                    setIsAnalyzing(false);
-                }
-            };
 
             const isQuickAddReady = quickAddName.trim() !== '' && quickAddCost.trim() !== '';
             const activeSku = (selectedCartIndex >= 0 && cart[selectedCartIndex]) ? cart[selectedCartIndex].sku : selectedSku;
@@ -407,10 +366,10 @@
 
             // ================== Main Render ==================
             return (
-                <div className={`w-full h-full flex flex-col font-sans antialiased text-slate-800 dark:text-slate-100 select-none ${isDarkMode ? 'dark' : ''}`}>
+                <div className={`fixed inset-0 w-full h-full flex flex-col font-sans antialiased text-slate-800 dark:text-slate-100 select-none ${isDarkMode ? 'dark' : ''}`}>
                     
                     {/* 背景极光 (绝对定位，贯穿铺满物理全屏) */}
-                    <div className="absolute inset-0 z-0 pointer-events-none w-full h-full">
+                    <div className="absolute inset-0 z-0 pointer-events-none w-full h-full bg-slate-50 dark:bg-[#050510]">
                         <div className="absolute top-[-20%] left-[-10%] w-[100vw] h-[100vw] bg-indigo-500/20 dark:bg-indigo-600/20 rounded-full blur-[120px] animate-aurora"></div>
                         <div className="absolute bottom-[-10%] right-[-10%] w-[80vw] h-[80vw] bg-cyan-400/15 dark:bg-cyan-500/10 rounded-full blur-[100px] animate-aurora" style={{animationDelay: '-5s'}}></div>
                     </div>
@@ -480,34 +439,6 @@
                                                     ￥{Math.max(...cart.map(i=>i.sku.cost)).toFixed(2)}
                                                 </span>
                                             </div>
-                                        </div>
-
-                                        {/* 接入 Gemini AI 诊断功能 */}
-                                        <div className={`${UI_STYLE.card} p-5 flex flex-col gap-4`}>
-                                            <div className="flex items-center justify-between opacity-80">
-                                                <div className="flex items-center gap-2">
-                                                    <i className="ph-fill ph-magic-wand text-lg text-indigo-500"></i>
-                                                    <span className="text-xs font-black uppercase tracking-widest text-indigo-600 dark:text-cyan-400">AI 智能采购诊断</span>
-                                                </div>
-                                            </div>
-                                            
-                                            {aiAdvice ? (
-                                                <div className="bg-white/50 dark:bg-black/20 rounded-2xl p-4 text-sm leading-relaxed border border-indigo-100 dark:border-white/5 shadow-inner whitespace-pre-wrap font-medium">
-                                                    {aiAdvice}
-                                                </div>
-                                            ) : (
-                                                <button 
-                                                    onClick={handleAIAnalyze} 
-                                                    disabled={isAnalyzing}
-                                                    className={`w-full py-4 rounded-2xl font-black text-sm ios-btn-active shadow-lg transition-all ${isAnalyzing ? 'bg-slate-200 dark:bg-slate-800 text-slate-400' : 'bg-gradient-to-r from-indigo-500 to-purple-500 text-white shadow-indigo-500/30'}`}
-                                                >
-                                                    {isAnalyzing ? (
-                                                        <span className="flex items-center justify-center gap-2"><i className="ph-bold ph-spinner animate-spin"></i> 正在连接量子计算节点...</span>
-                                                    ) : (
-                                                        <span className="flex items-center justify-center gap-2"><i className="ph-bold ph-sparkle"></i> 生成全息进货建议</span>
-                                                    )}
-                                                </button>
-                                            )}
                                         </div>
 
                                         <div className={`${UI_STYLE.card} p-5 space-y-5`}>
