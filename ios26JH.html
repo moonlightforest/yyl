@@ -2,16 +2,15 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <!-- 核心：移动端 PWA 沉浸式与防缩放配置，viewport-fit=cover 确保穿透刘海与底部安全区 -->
+    <!-- 核心：移动端 PWA 沉浸式与防缩放配置，viewport-fit=cover 确保穿透灵动岛与底部安全区 -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     
     <!-- iOS PWA 专属 Meta 标签 -->
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <!-- 允许内容顶到屏幕最上方，状态栏透明 -->
+    <!-- 关键：black-translucent 是让网页铺满全屏、状态栏透明的唯一配置 -->
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="决策舱PRO">
-    <!-- 动态主题色占位，后续由 React 控制以实现 Safari 浏览器内的沉浸式融合 -->
-    <meta name="theme-color" content="#f8fafc">
+    <!-- 移除了 theme-color 标签，防止 iOS 强制填充上下白边/黑边 -->
     
     <!-- 桌面图标 -->
     <link rel="apple-touch-icon" href="https://api.iconify.design/ph/aperture-fill.svg?color=%236366f1&width=192&height=192">
@@ -36,24 +35,22 @@
     <script src="https://unpkg.com/@phosphor-icons/web"></script>
 
     <style>
-        /* 彻底解决 iOS 底部白边问题：锁死根视口，禁用所有回弹和默认滚动 */
+        /* 彻底解决 iOS 上下边界问题：锁死根视口，使用 vh/vw 铺满整个物理屏幕 */
         html, body, #root { 
             margin: 0;
             padding: 0;
-            width: 100%;
-            height: 100%;
-            position: fixed; /* 锁死物理屏幕 */
+            width: 100vw;
+            height: 100vh;
+            position: fixed; /* 锁死物理屏幕，禁止 iOS 回弹 */
+            top: 0;
+            left: 0;
             overflow: hidden;
-            background-color: #f8fafc; 
-            transition: background-color 0.8s ease; 
+            background-color: transparent; /* 保持透明，让 React 中的极光背景露出来 */
             font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             -webkit-font-smoothing: antialiased;
             -webkit-tap-highlight-color: transparent;
             touch-action: manipulation;
         }
-        
-        /* 确保暗色模式下安全区也不会漏出白边 */
-        html.dark, html.dark body, html.dark #root { background-color: #050510; }
         
         .custom-scrollbar::-webkit-scrollbar { display: none; }
         .custom-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
@@ -185,15 +182,12 @@
                 finally { setTimeout(() => setLoading(false), 300); }
             }, []);
 
-            // 动态注入 theme-color 保证灵动岛与底部触控区在 Safari 浏览时的沉浸感融合
+            // 全屏背景色控制：剥离 theme-color 依赖，依靠暗色类控制
             useEffect(() => {
-                const metaThemeColor = document.querySelector('meta[name="theme-color"]');
                 if (isDarkMode) {
                     document.documentElement.classList.add('dark');
-                    if (metaThemeColor) metaThemeColor.setAttribute('content', '#050510');
                 } else {
                     document.documentElement.classList.remove('dark');
-                    if (metaThemeColor) metaThemeColor.setAttribute('content', '#f8fafc');
                 }
             }, [isDarkMode]);
 
@@ -392,8 +386,9 @@
 
             // ================== Main Render ==================
             return (
-                <div className={`fixed inset-0 w-full h-full flex flex-col font-sans antialiased text-slate-800 dark:text-slate-100 overflow-hidden select-none ${isDarkMode ? 'dark' : ''}`}>
-                    {/* 背景极光 (绝对定位，铺满全屏所有区域包括安全区) */}
+                <div className={`absolute inset-0 w-full h-full flex flex-col font-sans antialiased text-slate-800 dark:text-slate-100 overflow-hidden select-none ${isDarkMode ? 'dark' : ''}`}>
+                    
+                    {/* 背景极光 (绝对定位，贯穿铺满全屏所有区域包括安全区) */}
                     <div className="absolute inset-0 z-0 bg-slate-50 dark:bg-[#050510] pointer-events-none w-full h-full">
                         <div className="absolute top-[-20%] left-[-10%] w-[100vw] h-[100vw] bg-indigo-500/20 dark:bg-indigo-600/20 rounded-full blur-[120px] animate-aurora"></div>
                         <div className="absolute bottom-[-10%] right-[-10%] w-[80vw] h-[80vw] bg-cyan-400/15 dark:bg-cyan-500/10 rounded-full blur-[100px] animate-aurora" style={{animationDelay: '-5s'}}></div>
@@ -544,7 +539,7 @@
                                 </div>
 
                                 {/* 底部悬浮控制台 (安全穿透) */}
-                                <div className="fixed bottom-[calc(env(safe-area-inset-bottom)+100px)] left-4 right-4 z-40 pointer-events-none flex flex-col gap-3 quick-add-controls">
+                                <div className="fixed bottom-[calc(max(16px,env(safe-area-inset-bottom))+90px)] left-4 right-4 z-40 pointer-events-none flex flex-col gap-3 quick-add-controls">
                                     <div className={`${UI_STYLE.card} p-3 shadow-2xl pointer-events-auto`}>
                                         <div className="flex items-center justify-between gap-2 overflow-x-auto custom-scrollbar mb-1 pl-1">
                                             <div className="flex items-center gap-1.5 shrink-0">
@@ -554,6 +549,7 @@
                                                 </span>
                                             </div>
                                             <div className="flex items-center gap-1.5 shrink-0">
+                                                {/* 极简快捷加购 */}
                                                 {[50, 100, 500, 1000].map(num => (
                                                     <button key={num} onClick={() => activeSku && handleQuickAddPurchase(activeSku, num)} className={`px-3 py-1.5 text-[11px] font-black rounded-full transition-transform active:scale-90 flex items-center justify-center ${selectedCartIndex >= 0 ? 'bg-indigo-500 text-white dark:bg-cyan-500 dark:text-slate-900 shadow-lg shadow-indigo-500/20' : 'bg-slate-200 dark:bg-slate-700 text-indigo-600 dark:text-cyan-400 border border-white/50 dark:border-white/5'}`}>
                                                         <span className="opacity-40 font-normal mr-[1px]">+</span>{num}
@@ -642,7 +638,7 @@
                                 </div>
 
                                 {/* 底部悬浮录入区 */}
-                                <div className="fixed bottom-[calc(env(safe-area-inset-bottom)+100px)] left-4 right-4 z-40">
+                                <div className="fixed bottom-[calc(max(16px,env(safe-area-inset-bottom))+90px)] left-4 right-4 z-40">
                                     <div className={`${UI_STYLE.card} p-4 flex flex-col gap-3 shadow-2xl`}>
                                         <div className="text-[10px] font-black opacity-30 uppercase tracking-[0.2em] text-center">资产注册终端</div>
                                         <button className={`w-full py-4 rounded-[1.2rem] font-black text-sm ios-btn-active transition-colors mb-1 ${isQuickAddReady ? 'bg-indigo-600 dark:bg-cyan-500 text-white dark:text-slate-900 shadow-lg shadow-indigo-500/30' : 'bg-slate-200 dark:bg-white/5 text-slate-400'}`} onClick={handleQuickAdd}>
@@ -685,7 +681,10 @@
                                 </div>
 
                                 {/* 底部专属标识 */}
-                                <div className="mt-16 flex flex-col items-center justify-center opacity-30 pointer-events-none w-full gap-1.5 select-none">
+                                <div className="mt-16 flex flex-col items-center justify-center opacity-40 pointer-events-none w-full gap-2 select-none">
+                                    <div className="text-[12px] font-serif font-bold tracking-widest text-slate-800 dark:text-slate-200 mb-1">
+                                        सुन्दरं जीवनं स्वयमेव स्रष्टव्यम्
+                                    </div>
                                     <div className="text-[11px] font-black tracking-[0.3em] text-slate-800 dark:text-white">姚银亮独家设计</div>
                                     <div className="text-[8px] font-bold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Exclusively Designed by Yao Yinliang</div>
                                 </div>
