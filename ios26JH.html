@@ -2,12 +2,18 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
+    <!-- 核心：移动端 PWA 与防缩放缩放配置 -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     
+    <!-- iOS PWA 专属 Meta 标签 -->
     <meta name="apple-mobile-web-app-capable" content="yes">
+    <!-- 允许内容顶到屏幕最上方，状态栏透明 -->
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="决策舱PRO">
+    <!-- 动态主题色占位，后续由 React 控制以实现 Safari 浏览器内的沉浸式融合 -->
+    <meta name="theme-color" content="#f8fafc">
     
+    <!-- 桌面图标 (占位) -->
     <link rel="apple-touch-icon" href="https://api.iconify.design/ph/aperture-fill.svg?color=%236366f1&width=192&height=192">
 
     <title>决策舱 PRO // HOLOGRAPHIC OS</title>
@@ -16,13 +22,16 @@
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
     
     <script>
         tailwind.config = {
             darkMode: 'class',
             theme: {
                 extend: {
-                    colors: { holo: { light: '#f8fafc', dark: '#050510' } }
+                    colors: {
+                        holo: { light: '#f8fafc', dark: '#050510' }
+                    }
                 }
             }
         }
@@ -52,6 +61,7 @@
         }
         .animate-aurora { animation: aurora 25s infinite alternate ease-in-out; }
         
+        /* iOS 触控反馈 */
         .ios-btn-active:active { transform: scale(0.94); opacity: 0.8; transition: all 0.1s ease; }
         .ios-card-active:active { transform: scale(0.98); background-color: rgba(255,255,255,0.4); transition: all 0.1s ease; }
         .dark .ios-card-active:active { background-color: rgba(255,255,255,0.1); }
@@ -91,7 +101,7 @@
             return className ? <span className={className}>{format(displayValue)}</span> : <span>{format(displayValue)}</span>;
         };
 
-        // 苹果原生级：左滑删除卡片组件 (彻底解决发红和遮盖问题)
+        // 苹果原生级：左滑删除卡片组件
         const SwipeableItem = ({ children, onDelete, isSwiped, onSwipe }) => {
             const [startX, setStartX] = useState(null);
             const handleTouchStart = (e) => setStartX(e.touches[0].clientX);
@@ -132,7 +142,7 @@
             const [cart, setCart] = useState([]);
             
             const [selectedCartIndex, setSelectedCartIndex] = useState(-1);
-            const [activeTab, setActiveTab] = useState('purchase'); // dashboard, purchase, library, sync
+            const [activeTab, setActiveTab] = useState('purchase'); 
             
             const [searchTerm, setSearchTerm] = useState('');
             const [statusMsg, setStatusMsg] = useState({ type: null, text: '', data: null });
@@ -147,7 +157,6 @@
             const [queryTerm, setQueryTerm] = useState('');
             const [showQueryDropdown, setShowQueryDropdown] = useState(false);
             
-            // 解决卡顿：分批懒加载列表数量
             const [libraryDisplayCount, setLibraryDisplayCount] = useState(20);
 
             const fileInputRef = useRef(null);
@@ -171,13 +180,15 @@
                 finally { setTimeout(() => setLoading(false), 300); }
             }, []);
 
+            // 动态注入 theme-color 保证灵动岛与 Safari 浏览时的沉浸感融合
             useEffect(() => {
+                const metaThemeColor = document.querySelector('meta[name="theme-color"]');
                 if (isDarkMode) {
                     document.documentElement.classList.add('dark');
-                    document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]')?.setAttribute('content', 'black-translucent');
+                    if (metaThemeColor) metaThemeColor.setAttribute('content', '#050510');
                 } else {
                     document.documentElement.classList.remove('dark');
-                    document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]')?.setAttribute('content', 'default');
+                    if (metaThemeColor) metaThemeColor.setAttribute('content', '#f8fafc');
                 }
             }, [isDarkMode]);
 
@@ -191,7 +202,7 @@
 
             const toggleTheme = () => setIsDarkMode(prev => { const n = !prev; localStorage.setItem('yao_theme_dark', n); return n; });
 
-            // 重置列表显示数量 (搜索或切换 Tab 时)
+            // 重置列表显示数量
             useEffect(() => {
                 setLibraryDisplayCount(20);
                 setSwipedSkuName(null);
@@ -289,7 +300,7 @@
                 const costNum = parseFloat(quickAddCost.replace(/[^\d.]/g, ''));
                 if (isNaN(costNum)) return;
                 const newSku = { name: quickAddName, cost: costNum };
-                const newSkus = skus.some(s => s.name === quickAddName) ? skus.map(s => s.name === quickAddName ? newSku : s) : [newSku, ...skus]; // 新加的放最前
+                const newSkus = skus.some(s => s.name === quickAddName) ? skus.map(s => s.name === quickAddName ? newSku : s) : [newSku, ...skus]; 
                 setSkus(newSkus); setQuickAddName(''); setQuickAddCost('');
                 saveToLocal({ skus: newSkus });
                 setStatusMsg({ type: 'success', text: `✨ 录入成功：${quickAddName}` });
@@ -377,27 +388,32 @@
             // ================== Main Render ==================
             return (
                 <div className={`h-[100dvh] flex flex-col relative font-sans antialiased text-slate-800 dark:text-slate-100 overflow-hidden select-none ${isDarkMode ? 'dark' : ''}`}>
-                    {/* 背景极光 */}
+                    {/* 背景极光 (铺满全屏) */}
                     <div className="fixed inset-0 z-0 bg-slate-50 dark:bg-[#050510] pointer-events-none">
                         <div className="absolute top-[-20%] left-[-10%] w-[100vw] h-[100vw] bg-indigo-500/20 dark:bg-indigo-600/20 rounded-full blur-[120px] animate-aurora"></div>
                         <div className="absolute bottom-[-10%] right-[-10%] w-[80vw] h-[80vw] bg-cyan-400/15 dark:bg-cyan-500/10 rounded-full blur-[100px] animate-aurora" style={{animationDelay: '-5s'}}></div>
                     </div>
 
-                    {/* iOS 安全区与 Header */}
-                    <div className="pt-[env(safe-area-inset-top)] z-50 shrink-0 bg-slate-50/50 dark:bg-[#050510]/50 backdrop-blur-xl pointer-events-none"></div>
-                    <header className="flex justify-between items-center px-6 py-4 z-50 shrink-0">
+                    {/* iOS 灵动岛沉浸式 Header (完全透明，融入背景，自动避让安全区) */}
+                    <header 
+                        className="flex justify-between items-center px-6 pb-2 z-50 shrink-0 relative pointer-events-auto"
+                        style={{ paddingTop: 'max(16px, env(safe-area-inset-top))' }}
+                    >
                         <div className="flex items-center gap-2">
                             <div className="w-8 h-8 rounded-xl bg-indigo-600 dark:bg-cyan-500 flex items-center justify-center text-white dark:text-slate-900 shadow-lg"><i className="ph-bold ph-aperture"></i></div>
-                            <h1 className="text-sm font-black tracking-widest uppercase">决策舱 PRO</h1>
+                            <h1 className="text-sm font-black tracking-widest uppercase drop-shadow-sm">决策舱 PRO</h1>
                         </div>
-                        <div className="ios-btn-active w-10 h-10 bg-black/5 dark:bg-white/10 rounded-full flex items-center justify-center" onClick={toggleTheme}>
+                        <div className="ios-btn-active w-10 h-10 bg-black/5 dark:bg-white/10 backdrop-blur-md rounded-full flex items-center justify-center border border-black/5 dark:border-white/5" onClick={toggleTheme}>
                             <i className={`ph-fill ${isDarkMode ? 'ph-moon text-amber-300' : 'ph-sun text-indigo-600'} text-xl`}></i>
                         </div>
                     </header>
 
-                    {/* 全局提示 Toast */}
+                    {/* 全局提示 Toast (避开灵动岛往下推移) */}
                     {statusMsg.text && (
-                        <div className="fixed top-[calc(env(safe-area-inset-top)+60px)] left-1/2 -translate-x-1/2 z-[100] animate-in slide-in-from-top-4 fade-in duration-300 pointer-events-none">
+                        <div 
+                            className="fixed left-1/2 -translate-x-1/2 z-[100] animate-in slide-in-from-top-4 fade-in duration-300 pointer-events-none"
+                            style={{ top: 'calc(max(16px, env(safe-area-inset-top)) + 50px)' }}
+                        >
                             <div className="bg-slate-800/90 dark:bg-white/90 backdrop-blur-xl text-white dark:text-slate-900 px-5 py-2.5 rounded-full text-xs font-bold shadow-2xl flex items-center gap-2 border border-white/10">
                                 <i className="ph-fill ph-check-circle text-emerald-400 dark:text-emerald-500 text-base"></i> {statusMsg.text}
                             </div>
@@ -407,10 +423,10 @@
                     {/* 主内容区 */}
                     <main className="flex-1 overflow-hidden relative z-10 w-full max-w-lg mx-auto">
                         
-                        {/* 1. 进货看板 Dashboard View */}
+                        {/* 1. 智能分析 Dashboard View */}
                         {activeTab === 'dashboard' && (
                             <div className="flex flex-col gap-5 p-5 pb-[150px] overflow-y-auto h-full custom-scrollbar animate-in slide-in-from-right-4">
-                                <div className="text-center py-6 pb-2">
+                                <div className="text-center py-4">
                                     <h2 className="text-3xl font-black tracking-tight mb-1">进货大屏</h2>
                                     <p className="text-[10px] font-bold opacity-40 uppercase tracking-widest">Smart Purchase Analytics</p>
                                 </div>
@@ -428,6 +444,21 @@
                                             <span className="text-xs font-bold opacity-80 uppercase tracking-widest">预测资金流出</span>
                                             <div className="text-5xl font-black tracking-tighter">￥<AnimatedNumber value={purchaseStats.totalCost} /></div>
                                             <div className="text-[11px] font-bold opacity-70 mt-1 bg-white/20 self-start px-3 py-1 rounded-full">已激活 {cart.length} 个款式 / 共 {purchaseStats.totalQty} 件单品</div>
+                                        </div>
+
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div className={`${UI_STYLE.card} p-5 flex flex-col items-center text-center justify-center`}>
+                                                <span className="text-[10px] font-bold opacity-40 uppercase tracking-widest mb-1">价格最高单品</span>
+                                                <span className="text-base font-black text-slate-800 dark:text-white truncate w-full px-1">
+                                                    {[...cart].sort((a,b)=>(b.sku.cost*b.qty)-(a.sku.cost*a.qty))[0].sku.name}
+                                                </span>
+                                            </div>
+                                            <div className={`${UI_STYLE.card} p-5 flex flex-col items-center text-center justify-center`}>
+                                                <span className="text-[10px] font-bold opacity-40 uppercase tracking-widest mb-1">最贵单品进价</span>
+                                                <span className="text-2xl font-black text-slate-800 dark:text-white">
+                                                    ￥{Math.max(...cart.map(i=>i.sku.cost)).toFixed(2)}
+                                                </span>
+                                            </div>
                                         </div>
 
                                         <div className={`${UI_STYLE.card} p-5 space-y-5`}>
@@ -453,17 +484,6 @@
                                                 })}
                                             </div>
                                         </div>
-
-                                        <div className="grid grid-cols-2 gap-4">
-                                            <div className={`${UI_STYLE.card} p-5 flex flex-col items-center text-center justify-center`}>
-                                                <span className="text-[10px] font-bold opacity-40 uppercase tracking-widest mb-1">平均单件成本</span>
-                                                <span className="text-2xl font-black text-slate-800 dark:text-white">￥{purchaseStats.totalQty > 0 ? (purchaseStats.totalCost / purchaseStats.totalQty).toFixed(2) : '0.00'}</span>
-                                            </div>
-                                            <div className={`${UI_STYLE.card} p-5 flex flex-col items-center text-center justify-center`}>
-                                                <span className="text-[10px] font-bold opacity-40 uppercase tracking-widest mb-1">最贵单品进价</span>
-                                                <span className="text-2xl font-black text-slate-800 dark:text-white">￥{Math.max(...cart.map(i=>i.sku.cost)).toFixed(2)}</span>
-                                            </div>
-                                        </div>
                                     </div>
                                 )}
                             </div>
@@ -472,19 +492,30 @@
                         {/* 2. 查询进货 View */}
                         {activeTab === 'purchase' && (
                             <div className="flex flex-col h-full animate-in slide-in-from-right-4 relative z-10">
-                                <div className="flex-1 overflow-y-auto custom-scrollbar p-4 pb-[320px]">
-                                    <div className="flex justify-between items-end mb-6 px-1">
+                                <div className="flex-1 overflow-y-auto custom-scrollbar px-4 pt-2 pb-[320px]">
+                                    
+                                    {/* 核心改动：将总额卡片固定在顶部并增加吸附特效 */}
+                                    <div className="sticky top-0 z-30 pt-1 pb-4 bg-transparent">
+                                        <div className="p-6 bg-slate-900/90 dark:bg-white/95 backdrop-blur-xl rounded-[2rem] text-white dark:text-slate-900 shadow-[0_15px_40px_rgba(0,0,0,0.15)] flex flex-col justify-center items-center text-center border border-white/10 dark:border-black/5 relative overflow-hidden">
+                                            {/* 背景光效 */}
+                                            <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/30 rounded-full blur-3xl transform translate-x-1/2 -translate-y-1/2 pointer-events-none"></div>
+                                            <div className="text-[11px] font-bold opacity-60 uppercase tracking-widest relative z-10">应付采购总额</div>
+                                            <div className="text-[44px] font-black tracking-tighter mt-0.5 mb-2 text-indigo-300 dark:text-indigo-600 relative z-10 leading-none">￥<AnimatedNumber value={purchaseStats.totalCost} /></div>
+                                            <div className="text-[10px] font-bold opacity-80 bg-white/10 dark:bg-black/5 px-4 py-1.5 rounded-full relative z-10">总计装载 {purchaseStats.totalQty} 件商品</div>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex justify-between items-end mb-4 px-1 mt-2">
                                         <div>
-                                            <h2 className="text-2xl font-black tracking-tight">进货单</h2>
-                                            <p className="text-[10px] font-bold opacity-40 uppercase tracking-widest mt-1">Purchase List</p>
+                                            <h2 className="text-xl font-black tracking-tight">清单明细</h2>
                                         </div>
                                         {cart.length > 0 && (
-                                            <div className="ios-btn-active p-3 bg-rose-50 dark:bg-rose-500/10 text-rose-500 rounded-2xl" onClick={clearCart}><i className="ph-bold ph-trash text-lg"></i></div>
+                                            <div className="ios-btn-active p-2.5 bg-rose-50 dark:bg-rose-500/10 text-rose-500 rounded-2xl" onClick={clearCart}><i className="ph-bold ph-trash text-lg"></i></div>
                                         )}
                                     </div>
 
                                     {cart.length === 0 ? (
-                                        <div className="flex flex-col items-center justify-center h-64 opacity-20">
+                                        <div className="flex flex-col items-center justify-center h-48 opacity-20 mt-4">
                                             <i className="ph-bold ph-shopping-cart-simple text-6xl mb-2"></i>
                                             <span className="text-xs font-bold tracking-widest">清单目前处于真空状态</span>
                                         </div>
@@ -504,18 +535,11 @@
                                                     </div>
                                                 </div>
                                             ))}
-                                            
-                                            {/* 极简底部总金额栏 (移除复制功能，字体放最大) */}
-                                            <div className="mt-8 p-8 bg-slate-900 dark:bg-white rounded-[2.5rem] text-white dark:text-slate-900 shadow-2xl flex flex-col justify-center items-center text-center">
-                                                <div className="text-[12px] font-bold opacity-60 uppercase tracking-widest">应付采购总额</div>
-                                                <div className="text-5xl font-black tracking-tighter mt-2 mb-3 text-indigo-400 dark:text-indigo-600">￥<AnimatedNumber value={purchaseStats.totalCost} /></div>
-                                                <div className="text-sm font-bold opacity-80 bg-white/10 dark:bg-black/5 px-5 py-2 rounded-full">总计装载 {purchaseStats.totalQty} 件商品</div>
-                                            </div>
                                         </div>
                                     )}
                                 </div>
 
-                                {/* 底部悬浮控制台 (安全穿透，无渐变背景) */}
+                                {/* 底部悬浮控制台 (安全穿透) */}
                                 <div className="fixed bottom-[calc(env(safe-area-inset-bottom)+100px)] left-4 right-4 z-40 pointer-events-none flex flex-col gap-3 quick-add-controls">
                                     <div className={`${UI_STYLE.card} p-3 shadow-2xl pointer-events-auto`}>
                                         <div className="flex items-center justify-between gap-2 overflow-x-auto custom-scrollbar mb-1 pl-1">
@@ -526,7 +550,7 @@
                                                 </span>
                                             </div>
                                             <div className="flex items-center gap-1.5 shrink-0">
-                                                {/* 极简快捷加购：+50, +100, +500, +1000 */}
+                                                {/* 极简快捷加购 */}
                                                 {[50, 100, 500, 1000].map(num => (
                                                     <button key={num} onClick={() => activeSku && handleQuickAddPurchase(activeSku, num)} className={`px-3 py-1.5 text-[11px] font-black rounded-full transition-transform active:scale-90 flex items-center justify-center ${selectedCartIndex >= 0 ? 'bg-indigo-500 text-white dark:bg-cyan-500 dark:text-slate-900 shadow-lg shadow-indigo-500/20' : 'bg-slate-200 dark:bg-slate-700 text-indigo-600 dark:text-cyan-400 border border-white/50 dark:border-white/5'}`}>
                                                         <span className="opacity-40 font-normal mr-[1px]">+</span>{num}
@@ -676,7 +700,7 @@
 
                     {/* 清除确认弹窗 */}
                     {showClearConfirm && (
-                        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/60 backdrop-blur-md p-6 animate-in fade-in">
+                        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/60 backdrop-blur-md p-6 animate-in fade-in pointer-events-auto">
                             <div className={UI_STYLE.card + " p-8 w-full max-w-sm text-center space-y-6 !bg-white dark:!bg-slate-900 shadow-2xl"}>
                                 <div className="w-20 h-20 bg-rose-50 dark:bg-rose-900/20 rounded-full flex items-center justify-center mx-auto text-rose-500 text-4xl"><i className="ph-fill ph-warning-octagon"></i></div>
                                 <div className="font-black text-xl">确认清除全部矩阵数据？</div>
@@ -690,7 +714,7 @@
                     )}
 
                     {/* iOS 悬浮导航栏 (Floating Tab Bar) 半透明悬浮态 */}
-                    <nav className="fixed bottom-[calc(env(safe-area-inset-bottom)+16px)] left-4 right-4 z-[100] bg-white/80 dark:bg-[#1a1c29]/90 backdrop-blur-3xl shadow-[0_10px_40px_rgba(0,0,0,0.12)] dark:shadow-[0_10px_40px_rgba(0,0,0,0.6)] border border-white/80 dark:border-white/10 rounded-[2.5rem]">
+                    <nav className="fixed bottom-[calc(max(16px,env(safe-area-inset-bottom)))] left-4 right-4 z-[100] bg-white/80 dark:bg-[#1a1c29]/90 backdrop-blur-3xl shadow-[0_10px_40px_rgba(0,0,0,0.12)] dark:shadow-[0_10px_40px_rgba(0,0,0,0.6)] border border-white/80 dark:border-white/10 rounded-[2.5rem]">
                         <div className="flex justify-around items-center h-[76px] px-2 max-w-lg mx-auto relative">
                             {[
                                 { id: 'dashboard', icon: 'ph-presentation-chart', label: '进货大屏' },
