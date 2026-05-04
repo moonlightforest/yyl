@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <!-- 核心：移动端 PWA 与防缩放缩放配置 -->
+    <!-- 核心：移动端 PWA 沉浸式与防缩放配置，viewport-fit=cover 确保穿透刘海与底部安全区 -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     
     <!-- iOS PWA 专属 Meta 标签 -->
@@ -13,7 +13,7 @@
     <!-- 动态主题色占位，后续由 React 控制以实现 Safari 浏览器内的沉浸式融合 -->
     <meta name="theme-color" content="#f8fafc">
     
-    <!-- 桌面图标 (占位) -->
+    <!-- 桌面图标 -->
     <link rel="apple-touch-icon" href="https://api.iconify.design/ph/aperture-fill.svg?color=%236366f1&width=192&height=192">
 
     <title>决策舱 PRO // HOLOGRAPHIC OS</title>
@@ -22,16 +22,13 @@
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
     
     <script>
         tailwind.config = {
             darkMode: 'class',
             theme: {
                 extend: {
-                    colors: {
-                        holo: { light: '#f8fafc', dark: '#050510' }
-                    }
+                    colors: { holo: { light: '#f8fafc', dark: '#050510' } }
                 }
             }
         }
@@ -39,16 +36,24 @@
     <script src="https://unpkg.com/@phosphor-icons/web"></script>
 
     <style>
-        body { 
+        /* 彻底解决 iOS 底部白边问题：锁死根视口，禁用所有回弹和默认滚动 */
+        html, body, #root { 
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            position: fixed; /* 锁死物理屏幕 */
+            overflow: hidden;
             background-color: #f8fafc; 
             transition: background-color 0.8s ease; 
             font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             -webkit-font-smoothing: antialiased;
             -webkit-tap-highlight-color: transparent;
             touch-action: manipulation;
-            overflow: hidden;
         }
-        .dark body { background-color: #050510; }
+        
+        /* 确保暗色模式下安全区也不会漏出白边 */
+        html.dark, html.dark body, html.dark #root { background-color: #050510; }
         
         .custom-scrollbar::-webkit-scrollbar { display: none; }
         .custom-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
@@ -64,7 +69,7 @@
         /* iOS 触控反馈 */
         .ios-btn-active:active { transform: scale(0.94); opacity: 0.8; transition: all 0.1s ease; }
         .ios-card-active:active { transform: scale(0.98); background-color: rgba(255,255,255,0.4); transition: all 0.1s ease; }
-        .dark .ios-card-active:active { background-color: rgba(255,255,255,0.1); }
+        html.dark .ios-card-active:active { background-color: rgba(255,255,255,0.1); }
     </style>
 </head>
 <body>
@@ -180,7 +185,7 @@
                 finally { setTimeout(() => setLoading(false), 300); }
             }, []);
 
-            // 动态注入 theme-color 保证灵动岛与 Safari 浏览时的沉浸感融合
+            // 动态注入 theme-color 保证灵动岛与底部触控区在 Safari 浏览时的沉浸感融合
             useEffect(() => {
                 const metaThemeColor = document.querySelector('meta[name="theme-color"]');
                 if (isDarkMode) {
@@ -377,7 +382,7 @@
             }, [queryTerm, skus]);
 
             if (loading) return (
-                <div className="h-[100dvh] bg-slate-50 dark:bg-[#050510] flex flex-col items-center justify-center gap-6">
+                <div className="fixed inset-0 bg-slate-50 dark:bg-[#050510] flex flex-col items-center justify-center gap-6">
                     <div className="relative">
                         <div className="absolute inset-0 bg-indigo-400 dark:bg-cyan-400 rounded-full blur-xl opacity-50 animate-pulse"></div>
                         <i className="ph-bold ph-aperture ph-spin text-indigo-600 dark:text-cyan-300 text-[60px] relative z-10"></i>
@@ -387,14 +392,14 @@
 
             // ================== Main Render ==================
             return (
-                <div className={`h-[100dvh] flex flex-col relative font-sans antialiased text-slate-800 dark:text-slate-100 overflow-hidden select-none ${isDarkMode ? 'dark' : ''}`}>
-                    {/* 背景极光 (铺满全屏) */}
-                    <div className="fixed inset-0 z-0 bg-slate-50 dark:bg-[#050510] pointer-events-none">
+                <div className={`fixed inset-0 w-full h-full flex flex-col font-sans antialiased text-slate-800 dark:text-slate-100 overflow-hidden select-none ${isDarkMode ? 'dark' : ''}`}>
+                    {/* 背景极光 (绝对定位，铺满全屏所有区域包括安全区) */}
+                    <div className="absolute inset-0 z-0 bg-slate-50 dark:bg-[#050510] pointer-events-none w-full h-full">
                         <div className="absolute top-[-20%] left-[-10%] w-[100vw] h-[100vw] bg-indigo-500/20 dark:bg-indigo-600/20 rounded-full blur-[120px] animate-aurora"></div>
                         <div className="absolute bottom-[-10%] right-[-10%] w-[80vw] h-[80vw] bg-cyan-400/15 dark:bg-cyan-500/10 rounded-full blur-[100px] animate-aurora" style={{animationDelay: '-5s'}}></div>
                     </div>
 
-                    {/* iOS 灵动岛沉浸式 Header (完全透明，融入背景，自动避让安全区) */}
+                    {/* 灵动岛沉浸式 Header (完全透明，融入背景，自动避让安全区) */}
                     <header 
                         className="flex justify-between items-center px-6 pb-2 z-50 shrink-0 relative pointer-events-auto"
                         style={{ paddingTop: 'max(16px, env(safe-area-inset-top))' }}
@@ -411,7 +416,7 @@
                     {/* 全局提示 Toast (避开灵动岛往下推移) */}
                     {statusMsg.text && (
                         <div 
-                            className="fixed left-1/2 -translate-x-1/2 z-[100] animate-in slide-in-from-top-4 fade-in duration-300 pointer-events-none"
+                            className="absolute left-1/2 -translate-x-1/2 z-[100] animate-in slide-in-from-top-4 fade-in duration-300 pointer-events-none"
                             style={{ top: 'calc(max(16px, env(safe-area-inset-top)) + 50px)' }}
                         >
                             <div className="bg-slate-800/90 dark:bg-white/90 backdrop-blur-xl text-white dark:text-slate-900 px-5 py-2.5 rounded-full text-xs font-bold shadow-2xl flex items-center gap-2 border border-white/10">
@@ -494,10 +499,9 @@
                             <div className="flex flex-col h-full animate-in slide-in-from-right-4 relative z-10">
                                 <div className="flex-1 overflow-y-auto custom-scrollbar px-4 pt-2 pb-[320px]">
                                     
-                                    {/* 核心改动：将总额卡片固定在顶部并增加吸附特效 */}
+                                    {/* 固定置顶的总额卡片 */}
                                     <div className="sticky top-0 z-30 pt-1 pb-4 bg-transparent">
                                         <div className="p-6 bg-slate-900/90 dark:bg-white/95 backdrop-blur-xl rounded-[2rem] text-white dark:text-slate-900 shadow-[0_15px_40px_rgba(0,0,0,0.15)] flex flex-col justify-center items-center text-center border border-white/10 dark:border-black/5 relative overflow-hidden">
-                                            {/* 背景光效 */}
                                             <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/30 rounded-full blur-3xl transform translate-x-1/2 -translate-y-1/2 pointer-events-none"></div>
                                             <div className="text-[11px] font-bold opacity-60 uppercase tracking-widest relative z-10">应付采购总额</div>
                                             <div className="text-[44px] font-black tracking-tighter mt-0.5 mb-2 text-indigo-300 dark:text-indigo-600 relative z-10 leading-none">￥<AnimatedNumber value={purchaseStats.totalCost} /></div>
@@ -550,7 +554,6 @@
                                                 </span>
                                             </div>
                                             <div className="flex items-center gap-1.5 shrink-0">
-                                                {/* 极简快捷加购 */}
                                                 {[50, 100, 500, 1000].map(num => (
                                                     <button key={num} onClick={() => activeSku && handleQuickAddPurchase(activeSku, num)} className={`px-3 py-1.5 text-[11px] font-black rounded-full transition-transform active:scale-90 flex items-center justify-center ${selectedCartIndex >= 0 ? 'bg-indigo-500 text-white dark:bg-cyan-500 dark:text-slate-900 shadow-lg shadow-indigo-500/20' : 'bg-slate-200 dark:bg-slate-700 text-indigo-600 dark:text-cyan-400 border border-white/50 dark:border-white/5'}`}>
                                                         <span className="opacity-40 font-normal mr-[1px]">+</span>{num}
