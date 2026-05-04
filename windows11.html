@@ -1,0 +1,846 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>润晟软件 V1.6 // Windows 11 Edition</title>
+    
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['"Segoe UI Variable"', '"Segoe UI"', '"Microsoft YaHei"', 'sans-serif']
+                    },
+                    colors: {
+                        win: {
+                            light: '#f3f3f3',
+                            dark: '#202020',
+                            cardLight: 'rgba(255, 255, 255, 0.7)',
+                            cardDark: 'rgba(45, 45, 45, 0.7)',
+                            accent: '#0067c0',
+                            accentDark: '#4cc2ff'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+
+    <style>
+        /* Windows 11 基础样式重置 */
+        *, *::before, *::after { box-sizing: border-box; }
+        
+        body { 
+            margin: 0; 
+            padding: 0;
+            overflow: hidden; 
+            background-color: #f3f3f3; 
+            color: #1a1a1a;
+        }
+        
+        html.dark body { 
+            background-color: #202020; 
+            color: #ffffff;
+        }
+
+        /* Windows 风格滚动条 */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, 0.2); border-radius: 10px; }
+        html.dark ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.2); }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(0, 0, 0, 0.4); }
+        html.dark ::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.4); }
+
+        /* Win11 绽放背景模拟 */
+        .win-bg-bloom {
+            position: absolute;
+            width: 80vw;
+            height: 80vh;
+            background: radial-gradient(circle, rgba(0,103,192,0.15) 0%, rgba(0,0,0,0) 70%);
+            top: -20%;
+            right: -10%;
+            z-index: 0;
+            pointer-events: none;
+        }
+        html.dark .win-bg-bloom {
+            background: radial-gradient(circle, rgba(76,194,255,0.1) 0%, rgba(0,0,0,0) 70%);
+        }
+
+        /* 输入框底边高亮特效 */
+        .win-input:focus { border-bottom-color: #0067c0; border-bottom-width: 2px; padding-bottom: calc(0.5rem - 1px); }
+        html.dark .win-input:focus { border-bottom-color: #4cc2ff; }
+
+        /* 金色雕刻文字特效 */
+        .gold-engraved {
+            color: #b8860b; 
+            text-shadow: 1px 1px 1px rgba(255, 255, 255, 0.7), -1px -1px 1px rgba(0, 0, 0, 0.15);
+        }
+        html.dark .gold-engraved {
+            color: #d4af37; 
+            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.9), -1px -1px 1px rgba(255, 255, 255, 0.15);
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useMemo, useRef, useEffect, useCallback } = React;
+
+        const SEED_DATA = [
+            { name: "示例：3D立体本", cost: 0.70, category: "本子" },
+            { name: "示例：98K中性笔", cost: 0.50, category: "中性笔" },
+        ];
+
+        // 动态数值组件
+        const AnimatedNumber = ({ value, format = (v) => v.toFixed(2), className }) => {
+            const [displayValue, setDisplayValue] = useState(value);
+            useEffect(() => {
+                let startTime = null;
+                const startValue = displayValue;
+                const distance = value - startValue;
+                if (distance === 0) return;
+                const animate = (t) => {
+                    if (!startTime) startTime = t;
+                    const p = Math.min((t - startTime) / 300, 1); 
+                    setDisplayValue(startValue + distance * (1 - Math.pow(1 - p, 3)));
+                    if (p < 1) requestAnimationFrame(animate); else setDisplayValue(value);
+                };
+                requestAnimationFrame(animate);
+            }, [value]);
+            return <span className={className}>{format(displayValue)}</span>;
+        };
+
+        function App() {
+            // Windows 11 UI 风格类
+            const winCard = "bg-white/80 dark:bg-[#2d2d2d]/80 backdrop-blur-xl border border-black/5 dark:border-white/10 shadow-sm rounded-xl transition-all";
+            const winInput = "win-input w-full bg-white dark:bg-[#1f1f1f] border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none transition-colors";
+            const winButton = "bg-win-accent dark:bg-win-accentDark text-white dark:text-slate-900 hover:opacity-90 active:scale-[0.98] px-4 py-2 rounded-md font-medium text-sm transition-all shadow-sm flex items-center justify-center gap-2";
+            const winButtonSec = "bg-gray-100 dark:bg-[#333333] text-gray-800 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-[#444444] active:scale-[0.98] border border-black/5 dark:border-white/5 px-4 py-2 rounded-md font-medium text-sm transition-all flex items-center justify-center gap-2";
+
+            const [loading, setLoading] = useState(true);
+            const [isDarkMode, setIsDarkMode] = useState(false);
+            
+            const [skus, setSkus] = useState(SEED_DATA);
+            const [cart, setCart] = useState([]);
+            
+            const [activeView, setActiveView] = useState('workspace'); 
+            
+            // 搜索与选中状态
+            const [queryTerm, setQueryTerm] = useState('');
+            const [showQueryDropdown, setShowQueryDropdown] = useState(false);
+            const [selectedCartIndex, setSelectedCartIndex] = useState(-1);
+            
+            // 搜索下拉框键盘选择状态
+            const [highlightedSuggestionIndex, setHighlightedSuggestionIndex] = useState(-1);
+            
+            // 资产管理状态
+            const [searchTerm, setSearchTerm] = useState('');
+            const [quickAddName, setQuickAddName] = useState('');
+            const [quickAddCost, setQuickAddCost] = useState('');
+            const [editingSkuName, setEditingSkuName] = useState(null);
+            const [editingCostValue, setEditingCostValue] = useState('');
+            
+            // 分类编辑状态
+            const [editingCategorySkuName, setEditingCategorySkuName] = useState(null);
+            const [editingCategoryValue, setEditingCategoryValue] = useState('');
+            const [highlightedCatIndex, setHighlightedCatIndex] = useState(-1);
+
+            const [showClearConfirm, setShowClearConfirm] = useState(false);
+
+            const [statusMsg, setStatusMsg] = useState({ type: null, text: '' });
+            const fileInputRef = useRef(null);
+
+            // 数据持久化初始化
+            useEffect(() => {
+                try {
+                    const savedDark = localStorage.getItem('yao_theme_dark_win');
+                    if (savedDark !== null) setIsDarkMode(savedDark === 'true');
+                    else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) setIsDarkMode(true);
+
+                    const localData = localStorage.getItem('yao_pricing_db_win');
+                    if (localData) {
+                        const data = JSON.parse(localData);
+                        if (data.skus) setSkus(data.skus);
+                        if (data.cart) setCart(data.cart);
+                    }
+                } catch (e) {} 
+                finally { setTimeout(() => setLoading(false), 200); }
+            }, []);
+
+            useEffect(() => {
+                if (isDarkMode) document.documentElement.classList.add('dark');
+                else document.documentElement.classList.remove('dark');
+            }, [isDarkMode]);
+
+            const saveToLocal = (updates) => {
+                try {
+                    const current = JSON.parse(localStorage.getItem('yao_pricing_db_win') || '{}');
+                    const newData = { ...current, skus, cart, ...updates };
+                    localStorage.setItem('yao_pricing_db_win', JSON.stringify(newData));
+                } catch (e) {}
+            };
+
+            const toggleTheme = () => setIsDarkMode(prev => { const n = !prev; localStorage.setItem('yao_theme_dark_win', n); return n; });
+
+            const showToast = (text, type = 'success') => {
+                setStatusMsg({ type, text });
+                setTimeout(() => setStatusMsg({ type: null, text: '' }), 2500);
+            };
+
+            // 全局点击空白处释放焦点
+            useEffect(() => {
+                const handleClickOutside = (e) => {
+                    if (selectedCartIndex === -1) return;
+                    if (!e.target.closest('.cart-item-row') && !e.target.closest('.quick-add-controls')) {
+                        setSelectedCartIndex(-1);
+                    }
+                };
+                document.addEventListener('mousedown', handleClickOutside);
+                return () => document.removeEventListener('mousedown', handleClickOutside);
+            }, [selectedCartIndex]);
+
+            // ---- 核心业务逻辑 ----
+            const handleQuickAddPurchase = (sku, amount) => {
+                if (!sku) return;
+                setCart(prev => {
+                    const existingIdx = prev.findIndex(item => item.sku.name === sku.name);
+                    let newCart;
+                    if (existingIdx >= 0) {
+                        newCart = prev.map((item, i) => i === existingIdx ? { ...item, qty: item.qty + amount } : item);
+                        setSelectedCartIndex(existingIdx);
+                    } else {
+                        newCart = [...prev, { sku, qty: amount }];
+                        setSelectedCartIndex(newCart.length - 1);
+                    }
+                    saveToLocal({ cart: newCart });
+                    return newCart;
+                });
+                showToast(`已将 ${sku.name} 接入清单`);
+            };
+
+            const updateCartQty = (idx, qty) => {
+                setCart(prev => {
+                    const next = prev.map((item, i) => i === idx ? { ...item, qty: Math.max(0, qty) } : item);
+                    saveToLocal({ cart: next }); return next;
+                });
+            };
+
+            const removeFromCart = (index, e) => {
+                if(e) e.stopPropagation();
+                setCart(prev => {
+                    const newCart = prev.filter((_, i) => i !== index);
+                    saveToLocal({ cart: newCart });
+                    return newCart;
+                });
+                setSelectedCartIndex(-1);
+            };
+
+            const clearCart = () => { setCart([]); saveToLocal({ cart: [] }); setSelectedCartIndex(-1); };
+
+            const purchaseStats = useMemo(() => {
+                if (cart.length === 0) return { totalQty: 0, totalCost: 0 };
+                const totalQty = cart.reduce((sum, item) => sum + item.qty, 0);
+                const totalCost = cart.reduce((sum, item) => sum + (item.sku.cost * item.qty), 0);
+                return { totalQty, totalCost };
+            }, [cart]);
+
+            // [新增] 动态字体大小计算引擎：根据数值长度自动缩放，防止撑破卡片
+            const getDynamicTextSize = (numVal, baseSize = 'text-4xl', midSize = 'text-3xl', smallSize = 'text-2xl') => {
+                if (!numVal || isNaN(numVal)) return baseSize;
+                const len = numVal.toFixed(2).length;
+                if (len >= 10) return smallSize; // 例如: 1000000.00 (百万级，字号最小)
+                if (len >= 8) return midSize;    // 例如: 10000.00 (万级，字号中等)
+                return baseSize;                 // 常规大小
+            };
+
+            const querySuggestions = useMemo(() => {
+                if (!queryTerm.trim()) return [];
+                return skus.filter(s => s.name.toLowerCase().includes(queryTerm.toLowerCase())).slice(0, 10);
+            }, [queryTerm, skus]);
+
+            useEffect(() => { setHighlightedSuggestionIndex(-1); }, [queryTerm]);
+
+            useEffect(() => {
+                if (highlightedSuggestionIndex >= 0) {
+                    const el = document.getElementById(`suggestion-${highlightedSuggestionIndex}`);
+                    if (el) el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+                }
+            }, [highlightedSuggestionIndex]);
+
+            // ---- 分类管理逻辑 ----
+            const allCategories = useMemo(() => {
+                const cats = new Set(['未分类']);
+                skus.forEach(s => { if (s.category) cats.add(s.category); });
+                return Array.from(cats);
+            }, [skus]);
+
+            const filteredCats = useMemo(() => {
+                return allCategories.filter(c => c.toLowerCase().includes(editingCategoryValue.toLowerCase()));
+            }, [allCategories, editingCategoryValue]);
+
+            const handleEditCategory = (skuName, newCat) => {
+                const val = newCat.trim() || '未分类';
+                const updatedSkus = skus.map(s => s.name === skuName ? { ...s, category: val } : s);
+                setSkus(updatedSkus);
+                saveToLocal({ skus: updatedSkus });
+                setEditingCategorySkuName(null);
+            };
+
+            // ---- 数据库业务逻辑 ----
+            const isQuickAddReady = quickAddName.trim() !== '' && quickAddCost.trim() !== '';
+
+            const handleQuickAddSku = () => {
+                if (!isQuickAddReady) return;
+                const costNum = parseFloat(quickAddCost.replace(/[^\d.]/g, ''));
+                if (isNaN(costNum)) return;
+                const newSku = { name: quickAddName, cost: costNum, category: "未分类" };
+                const newSkus = skus.some(s => s.name === quickAddName) ? skus.map(s => s.name === quickAddName ? newSku : s) : [newSku, ...skus]; 
+                setSkus(newSkus); setQuickAddName(''); setQuickAddCost('');
+                saveToLocal({ skus: newSkus });
+                showToast(`已注册新资产: ${quickAddName}`);
+                document.getElementById('add-sku-name')?.focus();
+            };
+
+            const handleEditCost = () => {
+                const newCost = parseFloat(editingCostValue.replace(/[^\d.]/g, ''));
+                if (isNaN(newCost)) return;
+                const updatedSkus = skus.map(s => s.name === editingSkuName ? { ...s, cost: newCost } : s);
+                setSkus(updatedSkus);
+                saveToLocal({ skus: updatedSkus });
+                setEditingSkuName(null);
+            };
+
+            const handleDeleteSku = (name) => {
+                const newSkus = skus.filter(s => s.name !== name);
+                setSkus(newSkus); saveToLocal({ skus: newSkus });
+            };
+
+            const handleClearAllSkus = () => {
+                setSkus([]); setCart([]); saveToLocal({ skus: [], cart: [] });
+                setShowClearConfirm(false);
+                showToast('数据库矩阵已重置');
+            };
+
+            const handleDataProcess = (raw) => {
+                if (!raw.trim()) return;
+                const lines = raw.split(/\r?\n/).filter(l => l.trim() !== "");
+                const results = lines.map((line) => {
+                    let parts = line.includes('\t') ? line.split('\t') : (line.includes(',') ? line.split(',') : line.split(/\s{2,}/));
+                    parts = parts.map(p => p.trim()).filter(p => p !== "");
+                    if (parts.length < 2) return null;
+                    const price = parseFloat(parts[1].replace(/[^\d.]/g, ''));
+                    if (isNaN(price)) return null;
+                    return { name: parts[0], cost: price, category: parts[2] || "未分类" };
+                }).filter(x => x);
+                if (results.length > 0) {
+                    const newSkusMap = new Map(skus.map(s => [s.name, s]));
+                    results.forEach(s => newSkusMap.set(s.name, s));
+                    const finalSkus = Array.from(newSkusMap.values());
+                    
+                    setSkus(finalSkus);
+                    saveToLocal({ skus: finalSkus });
+                    showToast(`同步节点已重构，载入 ${results.length} 项实体`);
+                }
+            };
+
+            const handleExportCSV = () => {
+                const BOM = '\uFEFF';
+                let csvContent = BOM + "资产名称,进价成本(￥),分类\n";
+                skus.forEach(sku => csvContent += `${sku.name},${sku.cost},${sku.category || '未分类'}\n`);
+                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(blob);
+                link.download = `决策舱矩阵导出_${new Date().toISOString().split('T')[0]}.csv`;
+                document.body.appendChild(link); link.click(); document.body.removeChild(link);
+            };
+
+            if (loading) return null;
+
+            return (
+                <div className="flex h-screen w-screen overflow-hidden relative">
+                    {/* Win11 极光背景 */}
+                    <div className="win-bg-bloom"></div>
+
+                    {/* 左侧侧边栏 (Sidebar) 窄化至 200px */}
+                    <aside className="w-[200px] bg-white/40 dark:bg-black/40 backdrop-blur-3xl border-r border-black/5 dark:border-white/5 flex flex-col z-20 shadow-lg shrink-0">
+                        <div className="p-5 flex items-center gap-2.5">
+                            <div className="w-7 h-7 bg-win-accent dark:bg-win-accentDark rounded-md flex items-center justify-center text-white dark:text-gray-900 shadow-md shrink-0">
+                                <i className="ph-bold ph-aperture text-lg"></i>
+                            </div>
+                            <div className="font-bold text-[14px] tracking-widest text-gray-900 dark:text-white truncate">润晟软件 V1.6</div>
+                        </div>
+
+                        <nav className="flex-1 px-3 space-y-1 mt-2">
+                            <button onClick={() => setActiveView('workspace')} className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] transition-colors ${activeView === 'workspace' ? 'bg-black/5 dark:bg-white/10 font-bold text-gray-900 dark:text-white' : 'text-gray-600 dark:text-gray-400 hover:bg-black/5 dark:hover:bg-white/5'}`}>
+                                <i className={`ph-bold ph-shopping-cart text-[16px] ${activeView === 'workspace' ? 'text-win-accent dark:text-win-accentDark' : ''}`}></i>
+                                进货工作台
+                            </button>
+                            <button onClick={() => setActiveView('database')} className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] transition-colors ${activeView === 'database' ? 'bg-black/5 dark:bg-white/10 font-bold text-gray-900 dark:text-white' : 'text-gray-600 dark:text-gray-400 hover:bg-black/5 dark:hover:bg-white/5'}`}>
+                                <i className={`ph-bold ph-database text-[16px] ${activeView === 'database' ? 'text-win-accent dark:text-win-accentDark' : ''}`}></i>
+                                资产数据库
+                            </button>
+                        </nav>
+
+                        <div className="p-4 border-t border-black/5 dark:border-white/5 space-y-4">
+                            <button onClick={toggleTheme} className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] text-gray-600 dark:text-gray-400 hover:bg-black/5 dark:hover:bg-white/5 transition-colors">
+                                <i className={`ph-fill ${isDarkMode ? 'ph-moon text-amber-400' : 'ph-sun text-yellow-500'} text-[16px]`}></i>
+                                {isDarkMode ? '切换明亮模式' : '切换暗黑模式'}
+                            </button>
+                        </div>
+                    </aside>
+
+                    {/* 右侧主工作区 */}
+                    <main className="flex-1 flex flex-col relative z-10 overflow-hidden bg-transparent">
+                        
+                        {/* 全局 Toast 通知 */}
+                        {statusMsg.text && (
+                            <div className="absolute top-6 left-1/2 -translate-x-1/2 z-50 animate-in slide-in-from-top-4 fade-in">
+                                <div className="bg-white dark:bg-[#333] border border-black/10 dark:border-white/10 shadow-lg px-4 py-2 rounded-md text-sm font-medium flex items-center gap-2 text-gray-800 dark:text-gray-100">
+                                    <i className="ph-fill ph-check-circle text-green-500"></i> {statusMsg.text}
+                                </div>
+                            </div>
+                        )}
+
+                        <div className="flex-1 w-full max-w-[1600px] mx-auto overflow-hidden p-8 flex flex-col">
+                            
+                            {/* =========================================
+                                视图 1：进货工作台 
+                                ========================================= */}
+                            {activeView === 'workspace' && (
+                                <div className="flex gap-6 w-full h-full animate-in fade-in min-h-0">
+                                    
+                                    {/* --- 第 1 列：检索与购物车 (占比 50%) --- */}
+                                    <div className="flex-[2] flex flex-col gap-6 h-full min-h-0">
+                                        <div className="flex justify-between items-end shrink-0 h-[50px] pb-1">
+                                            <div>
+                                                <h1 className="text-2xl font-bold leading-none">进货工作台</h1>
+                                                <p className="text-[10px] text-gray-500 dark:text-gray-400 mt-1.5 uppercase tracking-widest">Purchase Workspace</p>
+                                            </div>
+                                        </div>
+
+                                        {/* 搜索控制台 */}
+                                        <div className={`${winCard} p-4 flex flex-col gap-3 relative z-30 overflow-visible shrink-0 quick-add-controls`}>
+                                            <div className="flex items-center justify-between">
+                                                <div className="text-xs font-bold flex items-center gap-1.5 transition-colors">
+                                                    <div className={`w-2 h-2 rounded-full ${selectedCartIndex >= 0 ? 'bg-win-accent dark:bg-win-accentDark animate-pulse' : (queryTerm ? 'bg-amber-500' : 'bg-green-500')}`}></div>
+                                                    {selectedCartIndex >= 0 && cart[selectedCartIndex] 
+                                                        ? <span className="text-win-accent dark:text-win-accentDark">选中对象: {cart[selectedCartIndex].sku.name}</span>
+                                                        : <span className="text-gray-500">检索与快捷加购</span>
+                                                    }
+                                                </div>
+                                                <div className="flex gap-2">
+                                                    {[50, 100, 500, 1000].map(num => (
+                                                        <button key={num} onClick={() => {
+                                                            let target = null;
+                                                            if (selectedCartIndex >= 0 && cart[selectedCartIndex]) {
+                                                                target = cart[selectedCartIndex].sku;
+                                                            } else if (querySuggestions.length > 0) {
+                                                                target = querySuggestions[highlightedSuggestionIndex >= 0 ? highlightedSuggestionIndex : 0];
+                                                            } else if (skus.length > 0) {
+                                                                target = skus[0];
+                                                            }
+                                                            if (target) handleQuickAddPurchase(target, num);
+                                                        }} className="px-3 py-1 text-[11px] font-bold bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 rounded transition-colors active:scale-95">
+                                                            +{num}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                            <div className="relative group w-full">
+                                                <input 
+                                                    type="text" 
+                                                    placeholder="输入名称进行快速检索引擎... (上下箭头选择，回车加购)" 
+                                                    className={`${winInput} pl-10 h-[40px] pr-24 text-[13px]`} 
+                                                    value={queryTerm} 
+                                                    onChange={e => {setQueryTerm(e.target.value); setShowQueryDropdown(true);}} 
+                                                    onFocus={e => {setShowQueryDropdown(true); e.target.select();}} 
+                                                    onBlur={() => setTimeout(() => setShowQueryDropdown(false), 200)}
+                                                    onKeyDown={e => { 
+                                                        if (e.key === 'ArrowDown') {
+                                                            e.preventDefault();
+                                                            setHighlightedSuggestionIndex(prev => Math.min(prev + 1, querySuggestions.length - 1));
+                                                        } else if (e.key === 'ArrowUp') {
+                                                            e.preventDefault();
+                                                            setHighlightedSuggestionIndex(prev => Math.max(prev - 1, 0));
+                                                        } else if (e.key === 'Enter') {
+                                                            e.preventDefault();
+                                                            if (querySuggestions.length > 0) { 
+                                                                const targetIdx = highlightedSuggestionIndex >= 0 ? highlightedSuggestionIndex : 0;
+                                                                handleQuickAddPurchase(querySuggestions[targetIdx], 100); 
+                                                                setQueryTerm(''); 
+                                                                setShowQueryDropdown(false); 
+                                                                setHighlightedSuggestionIndex(-1);
+                                                                e.target.blur(); 
+                                                            } 
+                                                        } 
+                                                    }} 
+                                                />
+                                                <i className="ph-bold ph-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"></i>
+                                                
+                                                {/* Win11 下拉菜单 */}
+                                                {showQueryDropdown && queryTerm && (
+                                                    <div className="absolute top-full mt-2 left-0 right-0 bg-white/95 dark:bg-[#2d2d2d]/95 backdrop-blur-xl border border-black/10 dark:border-white/10 shadow-xl rounded-lg max-h-64 overflow-y-auto z-50 p-1 custom-scrollbar">
+                                                        {querySuggestions.length > 0 ? querySuggestions.map((s, idx) => (
+                                                            <div 
+                                                                key={s.name} 
+                                                                id={`suggestion-${idx}`}
+                                                                className={`px-3 py-2.5 rounded-md flex justify-between items-center cursor-pointer transition-colors ${idx === highlightedSuggestionIndex ? 'bg-win-accent/20 dark:bg-win-accentDark/20 font-bold border-l-2 border-win-accent dark:border-win-accentDark' : 'hover:bg-black/5 dark:hover:bg-white/5 border-l-2 border-transparent'}`} 
+                                                                onClick={() => { handleQuickAddPurchase(s, 100); setQueryTerm(''); setShowQueryDropdown(false); setHighlightedSuggestionIndex(-1); }}
+                                                            >
+                                                                <span className="text-[13px]">{s.name} <span className="text-[10px] text-gray-400 ml-1.5 px-1.5 py-0.5 bg-black/5 dark:bg-white/10 rounded">{s.category || '未分类'}</span></span>
+                                                                <span className="text-[12px] font-bold text-win-accent dark:text-win-accentDark">￥{s.cost.toFixed(2)}</span>
+                                                            </div>
+                                                        )) : <div className="p-4 text-center text-xs text-gray-500">矩阵中无此实体记录</div>}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        {/* 购物车列表 */}
+                                        <div className={`${winCard} flex-1 overflow-hidden flex flex-col min-h-0`}>
+                                            <div className="px-5 py-3.5 border-b border-black/5 dark:border-white/5 flex justify-between items-center bg-black/[0.02] dark:bg-white/[0.02] shrink-0">
+                                                <span className="text-[13px] font-bold text-gray-800 dark:text-gray-200">装载清单明细 ({cart.length})</span>
+                                                {cart.length > 0 && <button onClick={clearCart} className="text-[11px] text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 px-2 py-1 rounded transition-colors"><i className="ph-bold ph-trash mr-1"></i>重置</button>}
+                                            </div>
+                                            <div className="flex-1 overflow-y-auto custom-scrollbar p-2">
+                                                {cart.length === 0 ? (
+                                                    <div className="h-full flex flex-col items-center justify-center opacity-30">
+                                                        <i className="ph-bold ph-shopping-cart-simple text-5xl mb-3"></i>
+                                                        <span className="text-[13px] font-bold">清单处于真空状态</span>
+                                                    </div>
+                                                ) : (
+                                                    <div className="space-y-1">
+                                                        {cart.map((item, idx) => (
+                                                            <div key={idx} id={`cart-item-${idx}`} onClick={() => setSelectedCartIndex(idx)} className={`cart-item-row flex items-center justify-between p-3 rounded-lg cursor-pointer transition-colors group ${selectedCartIndex === idx ? 'bg-win-accent/10 dark:bg-win-accentDark/10 border-l-4 border-win-accent dark:border-win-accentDark' : 'hover:bg-black/5 dark:hover:bg-white/5 border-l-4 border-transparent'}`}>
+                                                                <div className="flex-1 truncate pr-4">
+                                                                    <div className="text-[13px] font-bold truncate text-gray-900 dark:text-gray-100">{item.sku.name}</div>
+                                                                    <div className="text-[11px] text-gray-500 mt-1 flex items-center gap-1.5">
+                                                                        <span className="px-1.5 py-0.5 bg-black/5 dark:bg-white/10 rounded font-medium text-gray-600 dark:text-gray-400">{item.sku.category || '未分类'}</span>
+                                                                        <span>单价 ￥{item.sku.cost.toFixed(2)}</span>
+                                                                    </div>
+                                                                </div>
+                                                                <div className="flex items-center gap-4 shrink-0">
+                                                                    <div className="flex flex-col items-end">
+                                                                        <span className="text-[10px] text-gray-400">小计</span>
+                                                                        <span className="text-[13px] font-black text-win-accent dark:text-win-accentDark">￥{(item.sku.cost * item.qty).toFixed(2)}</span>
+                                                                    </div>
+                                                                    <div className="w-px h-8 bg-gray-200 dark:bg-gray-700 mx-1"></div>
+                                                                    <div className="flex items-center gap-1">
+                                                                        <input 
+                                                                            type="number" 
+                                                                            value={item.qty === 0 ? '' : item.qty} 
+                                                                            onClick={e => e.stopPropagation()} 
+                                                                            onFocus={e => e.target.select()}
+                                                                            onChange={(e) => updateCartQty(idx, e.target.value === '' ? 0 : parseInt(e.target.value))} 
+                                                                            onKeyDown={e => { if (e.key === 'Enter') e.target.blur(); }}
+                                                                            className={`${winInput} w-20 text-center py-1 font-bold h-[30px] text-[13px]`} 
+                                                                        />
+                                                                        <button onClick={(e)=>removeFromCart(idx, e)} className="w-7 h-7 flex items-center justify-center text-red-400 opacity-0 group-hover:opacity-100 hover:bg-red-50 dark:hover:bg-red-900/30 rounded transition-all"><i className="ph-bold ph-x text-sm"></i></button>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* --- 第 2 列：资金统计 (占比 25%) --- */}
+                                    <div className="flex-1 flex flex-col gap-6 h-full min-h-0">
+                                        {/* 专属铭牌区：与左侧标题行对齐，完美贴靠右边缘 */}
+                                        <div className="flex justify-end items-end shrink-0 h-[50px] pb-1">
+                                            <div className="flex flex-col items-end select-none cursor-default gold-engraved">
+                                                <div className="text-[12px] font-black tracking-[0.3em] mr-[-0.3em]">姚银亮独家设计</div>
+                                                <div className="text-[8px] font-bold uppercase tracking-[0.2em] mt-0.5 opacity-80 mr-[-0.2em]">EXCLUSIVELY DESIGNED</div>
+                                            </div>
+                                        </div>
+                                        
+                                        {/* 核心总账面板 (增加 w-full overflow-hidden 防止撑大) */}
+                                        <div className={`${winCard} p-6 flex flex-col items-center justify-center text-center bg-gradient-to-br from-white to-gray-50 dark:from-[#2d2d2d] dark:to-[#222] shadow-md border-t-4 border-t-win-accent dark:border-t-win-accentDark shrink-0 w-full overflow-hidden`}>
+                                            <div className="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest mb-2 shrink-0">预测资金流出总额</div>
+                                            {/* 应用动态字号与防溢出截断 */}
+                                            <div className={`font-black text-gray-900 dark:text-white tracking-tighter mb-4 w-full truncate transition-all duration-300 ${getDynamicTextSize(purchaseStats.totalCost)}`}>
+                                                ￥<AnimatedNumber value={purchaseStats.totalCost} />
+                                            </div>
+                                            <div className="inline-block bg-black/5 dark:bg-white/10 px-4 py-1.5 rounded-full text-[11px] font-bold shrink-0 truncate max-w-full">
+                                                已配置 {purchaseStats.totalQty} 件单品
+                                            </div>
+                                        </div>
+
+                                        {/* 洞察数据 (同样应用动态字号防撑破) */}
+                                        <div className="flex flex-col gap-4 shrink-0 w-full overflow-hidden">
+                                            <div className={`${winCard} p-4 flex flex-col items-center justify-center text-center w-full overflow-hidden`}>
+                                                <span className="text-[10px] font-bold text-gray-500 uppercase mb-1.5 shrink-0">价格最高单品</span>
+                                                <span className="text-[15px] font-black text-gray-800 dark:text-gray-100 truncate w-full px-2">
+                                                    {cart.length > 0 ? [...cart].sort((a,b)=>b.sku.cost-a.sku.cost)[0].sku.name : '-'}
+                                                </span>
+                                            </div>
+                                            <div className={`${winCard} p-4 flex flex-col items-center justify-center text-center w-full overflow-hidden`}>
+                                                <span className="text-[10px] font-bold text-gray-500 uppercase mb-1.5 shrink-0">最贵单品进价</span>
+                                                <span className={`font-black text-gray-800 dark:text-gray-100 w-full truncate ${getDynamicTextSize(cart.length > 0 ? Math.max(...cart.map(i=>i.sku.cost)) : 0, 'text-[18px]', 'text-[16px]', 'text-[14px]')}`}>
+                                                    ￥{cart.length > 0 ? Math.max(...cart.map(i=>i.sku.cost)).toFixed(2) : '0.00'}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* --- 第 3 列：流向榜单 (占比 25%) --- */}
+                                    <div className="flex-1 flex flex-col gap-6 h-full min-h-0 w-full overflow-hidden">
+                                        <div className="flex justify-start items-end shrink-0 h-[50px] pb-1 w-full overflow-hidden">
+                                            <div>
+                                                <h2 className="text-[18px] font-bold leading-none text-gray-800 dark:text-gray-100 truncate">流向榜单</h2>
+                                                <p className="text-[10px] text-gray-500 dark:text-gray-400 mt-1.5 uppercase tracking-wider truncate">Top Distribution</p>
+                                            </div>
+                                        </div>
+
+                                        {/* 资金占比排行 (增强内部结构防止长数字溢出) */}
+                                        <div className={`${winCard} flex-1 overflow-hidden flex flex-col min-h-0 w-full`}>
+                                            <div className="px-5 py-3.5 border-b border-black/5 dark:border-white/5 text-[12px] font-bold text-gray-500 flex items-center gap-2 shrink-0 w-full">
+                                                <i className="ph-fill ph-chart-bar shrink-0"></i> <span className="truncate">资金流向分布</span>
+                                            </div>
+                                            <div className="flex-1 overflow-y-auto p-5 space-y-5 custom-scrollbar w-full">
+                                                {cart.length === 0 ? <div className="text-center text-[12px] opacity-40 py-4 font-medium">无数据流入</div> : 
+                                                [...cart].sort((a,b)=>(b.sku.cost*b.qty)-(a.sku.cost*a.qty)).map((item, idx) => {
+                                                    const itemCost = item.sku.cost * item.qty;
+                                                    const percentage = (itemCost / purchaseStats.totalCost) * 100;
+                                                    return (
+                                                        <div key={idx} className="space-y-1.5 w-full">
+                                                            {/* 增加 gap 并限制右侧价格的最大宽度，确保不换行、不撑爆 */}
+                                                            <div className="flex justify-between text-[12px] font-bold gap-2 w-full">
+                                                                <span className="truncate flex-1 text-gray-800 dark:text-gray-200">{item.sku.name}</span>
+                                                                <span className="text-win-accent dark:text-win-accentDark shrink-0 truncate max-w-[45%] text-right">￥{itemCost.toFixed(2)}</span>
+                                                            </div>
+                                                            <div className="w-full h-1.5 bg-black/5 dark:bg-white/10 rounded-full overflow-hidden">
+                                                                <div className="h-full bg-win-accent dark:bg-win-accentDark rounded-full transition-all duration-1000" style={{width: `${percentage}%`}}></div>
+                                                            </div>
+                                                        </div>
+                                                    )
+                                                })}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                </div>
+                            )}
+
+                            {/* =========================================
+                                视图 2：资产数据库 
+                                ========================================= */}
+                            {activeView === 'database' && (
+                                <div className="flex gap-6 w-full h-full animate-in fade-in min-h-0">
+                                    
+                                    {/* --- 第 1 列：资产长列表 --- 占比放大至 75% 保证表格宽敞 */}
+                                    <div className="flex-[3] flex flex-col gap-6 h-full min-h-0">
+                                        <div className="flex justify-between items-end shrink-0 h-[50px] pb-1">
+                                            <div>
+                                                <h1 className="text-2xl font-bold leading-none">资产矩阵</h1>
+                                                <p className="text-[10px] text-gray-500 dark:text-gray-400 mt-1.5 uppercase tracking-wider">Asset Database</p>
+                                            </div>
+                                            <div className="flex items-center gap-3">
+                                                <span className="text-[11px] font-bold px-2 py-1 bg-black/5 dark:bg-white/10 rounded text-gray-600 dark:text-gray-300">{skus.length} 实体驻留</span>
+                                                <button onClick={() => setShowClearConfirm(true)} className={`${winButtonSec} !text-red-500 hover:!bg-red-50 dark:hover:!bg-red-900/20 !py-1.5`}>
+                                                    <i className="ph-bold ph-trash"></i> 格式化矩阵
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        <div className={`${winCard} flex-1 flex flex-col overflow-hidden min-h-0`}>
+                                            <div className="p-3 border-b border-black/5 dark:border-white/5 bg-black/[0.02] dark:bg-white/[0.02] shrink-0">
+                                                <div className="relative">
+                                                    <i className="ph-bold ph-funnel absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"></i>
+                                                    <input 
+                                                        type="text" 
+                                                        className={`${winInput} pl-9 border-transparent shadow-none bg-transparent hover:bg-black/5 dark:hover:bg-white/5 focus:bg-white dark:focus:bg-[#1f1f1f] text-[13px] h-[36px]`} 
+                                                        placeholder="全局滤镜过滤..." 
+                                                        value={searchTerm} 
+                                                        onChange={e => setSearchTerm(e.target.value)} 
+                                                        onFocus={e => e.target.select()}
+                                                    />
+                                                </div>
+                                            </div>
+                                            
+                                            <div className="flex-1 overflow-y-auto custom-scrollbar relative">
+                                                <table className="w-full text-left border-collapse">
+                                                    <thead className="sticky top-0 bg-white/95 dark:bg-[#2d2d2d]/95 backdrop-blur z-10 text-[11px] text-gray-500 uppercase border-b border-black/5 dark:border-white/5 shadow-sm">
+                                                        <tr>
+                                                            {/* 添加 whitespace-nowrap 彻底防止换行 */}
+                                                            <th className="font-bold px-6 py-3 w-[45%] whitespace-nowrap">实体名称</th>
+                                                            <th className="font-bold px-6 py-3 w-[20%] text-center whitespace-nowrap">分类</th>
+                                                            <th className="font-bold px-6 py-3 w-[20%] text-right whitespace-nowrap">基准进价</th>
+                                                            <th className="font-bold px-6 py-3 w-[15%] text-center whitespace-nowrap">操作</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody className="text-[13px] text-gray-800 dark:text-gray-200">
+                                                        {skus.filter(s => s.name.toLowerCase().includes(searchTerm.toLowerCase())).map((sku, idx) => (
+                                                            <tr key={idx} className="border-b border-black/5 dark:border-white/5 hover:bg-black/5 dark:hover:bg-white/5 transition-colors group">
+                                                                <td className="px-6 py-3.5 font-bold truncate max-w-[200px]">{sku.name}</td>
+                                                                <td className="px-6 py-3.5 text-center whitespace-nowrap relative">
+                                                                    {editingCategorySkuName === sku.name ? (
+                                                                        <div className="relative inline-block text-left w-28">
+                                                                            <input 
+                                                                                autoFocus 
+                                                                                onFocus={e => { e.target.select(); setHighlightedCatIndex(-1); }}
+                                                                                className={`${winInput} w-full text-center py-1 h-[26px] text-[12px]`} 
+                                                                                value={editingCategoryValue} 
+                                                                                onChange={e => { setEditingCategoryValue(e.target.value); setHighlightedCatIndex(-1); }} 
+                                                                                onBlur={() => setTimeout(() => handleEditCategory(sku.name, editingCategoryValue), 150)} 
+                                                                                onKeyDown={e => { 
+                                                                                    if (e.key === 'ArrowDown') {
+                                                                                        e.preventDefault();
+                                                                                        setHighlightedCatIndex(prev => Math.min(prev + 1, filteredCats.length - 1));
+                                                                                    } else if (e.key === 'ArrowUp') {
+                                                                                        e.preventDefault();
+                                                                                        setHighlightedCatIndex(prev => Math.max(prev - 1, 0));
+                                                                                    } else if (e.key === 'Enter') {
+                                                                                        e.preventDefault();
+                                                                                        if (highlightedCatIndex >= 0 && filteredCats[highlightedCatIndex]) {
+                                                                                            handleEditCategory(sku.name, filteredCats[highlightedCatIndex]);
+                                                                                        } else {
+                                                                                            handleEditCategory(sku.name, editingCategoryValue);
+                                                                                        }
+                                                                                    } else if (e.key === 'Escape') {
+                                                                                        setEditingCategorySkuName(null);
+                                                                                    }
+                                                                                }} 
+                                                                            />
+                                                                            <div className="absolute top-full mt-1 left-1/2 -translate-x-1/2 w-32 bg-white/95 dark:bg-[#2d2d2d]/95 backdrop-blur-xl border border-black/10 dark:border-white/10 shadow-xl rounded-md max-h-40 overflow-y-auto z-[100] p-1 custom-scrollbar">
+                                                                                {filteredCats.length > 0 ? filteredCats.map((cat, cIdx) => (
+                                                                                    <div 
+                                                                                        key={cat} 
+                                                                                        className={`px-3 py-1.5 rounded-sm text-[12px] cursor-pointer transition-colors text-left ${cIdx === highlightedCatIndex ? 'bg-win-accent/20 dark:bg-win-accentDark/20 font-bold text-win-accent dark:text-win-accentDark' : 'hover:bg-black/5 dark:hover:bg-white/5 text-gray-800 dark:text-gray-200'}`}
+                                                                                        onMouseDown={(e) => { e.preventDefault(); handleEditCategory(sku.name, cat); }}
+                                                                                    >
+                                                                                        {cat}
+                                                                                    </div>
+                                                                                )) : (
+                                                                                    <div className="px-3 py-1.5 text-[11px] text-gray-400">回车创建新分类</div>
+                                                                                )}
+                                                                            </div>
+                                                                        </div>
+                                                                    ) : (
+                                                                        <span 
+                                                                            className="text-[11px] font-bold text-gray-500 dark:text-gray-400 bg-black/5 dark:bg-white/10 px-2.5 py-1 rounded-md cursor-pointer hover:bg-black/10 dark:hover:bg-white/20 transition-colors inline-block"
+                                                                            onClick={() => { setEditingCategorySkuName(sku.name); setEditingCategoryValue(sku.category || '未分类'); setHighlightedCatIndex(-1); }}
+                                                                        >
+                                                                            {sku.category || '未分类'}
+                                                                        </span>
+                                                                    )}
+                                                                </td>
+                                                                <td className="px-6 py-3.5 text-right whitespace-nowrap">
+                                                                    {editingSkuName === sku.name ? (
+                                                                        <input 
+                                                                            autoFocus 
+                                                                            onFocus={e => e.target.select()}
+                                                                            className={`${winInput} w-24 text-right py-1 h-[26px] text-[13px]`} 
+                                                                            value={editingCostValue} 
+                                                                            onChange={e => setEditingCostValue(e.target.value)} 
+                                                                            onBlur={handleEditCost} 
+                                                                            onKeyDown={e => { if(e.key==='Enter') handleEditCost(); }} 
+                                                                        />
+                                                                    ) : (
+                                                                        <span className="font-black text-win-accent dark:text-win-accentDark cursor-pointer px-2 py-1 rounded hover:bg-black/5 dark:hover:bg-white/10" onClick={() => {setEditingSkuName(sku.name); setEditingCostValue(sku.cost.toString());}}>
+                                                                            ￥{sku.cost.toFixed(2)}
+                                                                        </span>
+                                                                    )}
+                                                                </td>
+                                                                <td className="px-6 py-3.5 text-center whitespace-nowrap">
+                                                                    <button className="text-gray-400 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100" onClick={() => handleDeleteSku(sku.name)}>
+                                                                        <i className="ph-bold ph-trash text-lg"></i>
+                                                                    </button>
+                                                                </td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                                {skus.length === 0 && <div className="text-center py-10 text-[13px] text-gray-400 font-medium">矩阵查无此实体</div>}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* --- 第 2 列：实体注册 & 终端同步 --- 占比缩小为 25% ，让出空间 */}
+                                    <div className="flex-1 flex flex-col gap-6 h-full min-h-0">
+                                        <div className="h-[50px] shrink-0"></div>
+
+                                        {/* 注册表单 */}
+                                        <div className={`${winCard} p-5 space-y-4 shrink-0`}>
+                                            <div className="text-[13px] font-bold border-b border-black/5 dark:border-white/5 pb-2 mb-3">
+                                                注册新实体入库
+                                            </div>
+                                            <div className="space-y-3">
+                                                <div>
+                                                    <label className="text-[11px] text-gray-500 mb-1 block font-medium">实体资产名称</label>
+                                                    <input className={`${winInput} text-[13px] py-1.5`} placeholder="如：极光本..." value={quickAddName} onChange={e => setQuickAddName(e.target.value)} onFocus={e => e.target.select()} id="add-sku-name" />
+                                                </div>
+                                                <div>
+                                                    <label className="text-[11px] text-gray-500 mb-1 block font-medium">进价核算 (￥)</label>
+                                                    <input className={`${winInput} text-[13px] py-1.5`} placeholder="0.00" value={quickAddCost} onChange={e => setQuickAddCost(e.target.value)} onFocus={e => e.target.select()} onKeyDown={e=>{if(e.key==='Enter') handleQuickAddSku();}} />
+                                                </div>
+                                                <button className={`w-full mt-2 ${winButton} !py-2 ${!isQuickAddReady ? 'opacity-50 cursor-not-allowed' : ''}`} onClick={handleQuickAddSku} disabled={!isQuickAddReady}>
+                                                    <i className="ph-bold ph-plus"></i> 写入矩阵
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        {/* 终端同步 - 注入 flex-1 让它的下端和左侧表格卡片绝对对齐拉平 */}
+                                        <div className={`${winCard} p-5 flex flex-col gap-3 flex-1 overflow-hidden min-h-0`}>
+                                            <div className="text-[13px] font-bold border-b border-black/5 dark:border-white/5 pb-2 shrink-0">
+                                                I/O 终端互联
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-2 shrink-0">
+                                                <button className={`${winButtonSec} !px-2 !py-1.5 !text-[12px] flex-col gap-1 h-[60px]`} onClick={handleExportCSV}>
+                                                    <i className="ph-bold ph-download-simple text-lg text-indigo-500"></i>
+                                                    <span>导出 CSV</span>
+                                                </button>
+                                                <button className={`${winButtonSec} !px-2 !py-1.5 !text-[12px] flex-col gap-1 h-[60px]`} onClick={() => fileInputRef.current.click()}>
+                                                    <i className="ph-bold ph-upload-simple text-lg text-emerald-500"></i>
+                                                    <span>导入合并</span>
+                                                    <input type="file" ref={fileInputRef} className="hidden" accept=".csv,.txt" onChange={e => { const r = new FileReader(); r.onload = ev => handleDataProcess(ev.target.result); r.readAsText(e.target.files[0]); }} />
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                        </div>
+                    </main>
+
+                    {/* Windows 风格对话框 (清除确认) */}
+                    {showClearConfirm && (
+                        <div className="absolute inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm animate-in fade-in">
+                            <div className={`${winCard} p-6 w-[400px] shadow-2xl flex flex-col gap-4 scale-100 animate-in zoom-in-95`}>
+                                <div className="flex gap-4">
+                                    <div className="w-10 h-10 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center text-red-500 shrink-0">
+                                        <i className="ph-bold ph-warning text-xl"></i>
+                                    </div>
+                                    <div>
+                                        <h3 className="font-bold text-lg mb-1">格式化警告</h3>
+                                        <p className="text-sm text-gray-500 dark:text-gray-400 leading-relaxed">即将清除所有实体的存档。<br/>该操作属于底层销毁，无法撤销。</p>
+                                    </div>
+                                </div>
+                                <div className="flex justify-end gap-3 mt-2 border-t border-black/5 dark:border-white/5 pt-4">
+                                    <button className={winButtonSec} onClick={() => setShowClearConfirm(false)}>取消</button>
+                                    <button className={`${winButton} !bg-red-500 hover:!opacity-80`} onClick={handleClearAllSkus}>执行销毁</button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
