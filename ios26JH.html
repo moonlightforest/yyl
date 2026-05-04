@@ -2,14 +2,17 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <!-- 核心：强行突破 iOS 安全区限制，viewport-fit=cover 确保穿透灵动岛与底部触控区 -->
+    <!-- 核心：移动端 PWA 沉浸式与防缩放配置，viewport-fit=cover 确保穿透灵动岛与底部安全区 -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     
     <!-- iOS PWA 专属 Meta 标签 -->
     <meta name="apple-mobile-web-app-capable" content="yes">
+    <!-- 关键：black-translucent 是让网页铺满全屏、状态栏透明的唯一配置 -->
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="决策舱PRO">
+    <!-- 移除了 theme-color 标签，防止 iOS 强制填充上下白边/黑边 -->
     
+    <!-- 桌面图标 -->
     <link rel="apple-touch-icon" href="https://api.iconify.design/ph/aperture-fill.svg?color=%236366f1&width=192&height=192">
 
     <title>决策舱 PRO // HOLOGRAPHIC OS</title>
@@ -32,28 +35,17 @@
     <script src="https://unpkg.com/@phosphor-icons/web"></script>
 
     <style>
-        /* 终极杀招：将背景色直接注入到最底层的 html 节点，确保 iOS 安全区永远不会漏白边 */
-        html {
-            background-color: #f8fafc;
-        }
-        html.dark {
-            background-color: #050510;
-        }
-
-        /* 彻底锁死物理视口，钉死在屏幕四角 */
-        body, #root { 
+        /* 彻底解决 iOS 上下边界问题：锁死根视口，使用 vh/vw 铺满整个物理屏幕 */
+        html, body, #root { 
             margin: 0;
             padding: 0;
             width: 100vw;
             height: 100vh;
-            height: 100dvh; /* 优先使用动态视口高度 */
-            position: fixed; 
+            position: fixed; /* 锁死物理屏幕，禁止 iOS 回弹 */
             top: 0;
             left: 0;
-            right: 0;
-            bottom: 0;
             overflow: hidden;
-            background-color: transparent;
+            background-color: transparent; /* 保持透明，让 React 中的极光背景露出来 */
             font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             -webkit-font-smoothing: antialiased;
             -webkit-tap-highlight-color: transparent;
@@ -177,7 +169,7 @@
                     if (savedDark !== null) setIsDarkMode(savedDark === 'true');
                     else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) setIsDarkMode(true);
 
-                    const localData = localStorage.getItem('yao_pricing_db_v5');
+                    const localData = localStorage.getItem('yao_pricing_db_v4');
                     if (localData) {
                         const data = JSON.parse(localData);
                         if (data.skus) setSkus(data.skus);
@@ -190,7 +182,7 @@
                 finally { setTimeout(() => setLoading(false), 300); }
             }, []);
 
-            // 在切换暗色模式时，也同步切换 html 根标签的样式
+            // 全屏背景色控制：剥离 theme-color 依赖，依靠暗色类控制
             useEffect(() => {
                 if (isDarkMode) {
                     document.documentElement.classList.add('dark');
@@ -201,19 +193,21 @@
 
             const saveToLocal = (updates) => {
                 try {
-                    const current = JSON.parse(localStorage.getItem('yao_pricing_db_v5') || '{}');
+                    const current = JSON.parse(localStorage.getItem('yao_pricing_db_v4') || '{}');
                     const newData = { ...current, skus, lastSkuName: selectedSku?.name || "", cart, ...updates };
-                    localStorage.setItem('yao_pricing_db_v5', JSON.stringify(newData));
+                    localStorage.setItem('yao_pricing_db_v4', JSON.stringify(newData));
                 } catch (e) {}
             };
 
             const toggleTheme = () => setIsDarkMode(prev => { const n = !prev; localStorage.setItem('yao_theme_dark', n); return n; });
 
+            // 重置列表显示数量
             useEffect(() => {
                 setLibraryDisplayCount(20);
                 setSwipedSkuName(null);
             }, [searchTerm, activeTab]);
 
+            // 点击空白处释放焦点
             useEffect(() => {
                 const handleClickOutside = (e) => {
                     if (selectedCartIndex === -1) return;
@@ -225,6 +219,32 @@
                 document.addEventListener('mousedown', handleClickOutside);
                 return () => { document.removeEventListener('touchstart', handleClickOutside); document.removeEventListener('mousedown', handleClickOutside); };
             }, [selectedCartIndex]);
+
+            // 键盘穿梭
+            useEffect(() => {
+                const handleKeyDown = (e) => {
+                    if (activeTab !== 'purchase') return;
+                    if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName)) return;
+                    if (cart.length === 0) return;
+                    if (e.key === 'ArrowDown') {
+                        e.preventDefault();
+                        setSelectedCartIndex(prev => {
+                            const next = prev === -1 ? 0 : (prev < cart.length - 1 ? prev + 1 : prev);
+                            setTimeout(() => document.getElementById(`cart-item-${next}`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }), 0);
+                            return next;
+                        });
+                    } else if (e.key === 'ArrowUp') {
+                        e.preventDefault();
+                        setSelectedCartIndex(prev => {
+                            const next = prev === -1 ? cart.length - 1 : (prev > 0 ? prev - 1 : 0);
+                            setTimeout(() => document.getElementById(`cart-item-${next}`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }), 0);
+                            return next;
+                        });
+                    }
+                };
+                window.addEventListener('keydown', handleKeyDown);
+                return () => window.removeEventListener('keydown', handleKeyDown);
+            }, [cart.length, activeTab]);
 
             const handleQuickAddPurchase = (sku, amount) => {
                 if (!sku) return;
@@ -356,7 +376,7 @@
             }, [queryTerm, skus]);
 
             if (loading) return (
-                <div className="absolute inset-0 bg-slate-50 dark:bg-[#050510] flex flex-col items-center justify-center gap-6">
+                <div className="fixed inset-0 bg-slate-50 dark:bg-[#050510] flex flex-col items-center justify-center gap-6">
                     <div className="relative">
                         <div className="absolute inset-0 bg-indigo-400 dark:bg-cyan-400 rounded-full blur-xl opacity-50 animate-pulse"></div>
                         <i className="ph-bold ph-aperture ph-spin text-indigo-600 dark:text-cyan-300 text-[60px] relative z-10"></i>
@@ -366,10 +386,10 @@
 
             // ================== Main Render ==================
             return (
-                <div className={`fixed inset-0 w-full h-full flex flex-col font-sans antialiased text-slate-800 dark:text-slate-100 select-none ${isDarkMode ? 'dark' : ''}`}>
+                <div className={`absolute inset-0 w-full h-full flex flex-col font-sans antialiased text-slate-800 dark:text-slate-100 overflow-hidden select-none ${isDarkMode ? 'dark' : ''}`}>
                     
-                    {/* 背景极光 (绝对定位，贯穿铺满物理全屏) */}
-                    <div className="absolute inset-0 z-0 pointer-events-none w-full h-full bg-slate-50 dark:bg-[#050510]">
+                    {/* 背景极光 (绝对定位，贯穿铺满全屏所有区域包括安全区) */}
+                    <div className="absolute inset-0 z-0 bg-slate-50 dark:bg-[#050510] pointer-events-none w-full h-full">
                         <div className="absolute top-[-20%] left-[-10%] w-[100vw] h-[100vw] bg-indigo-500/20 dark:bg-indigo-600/20 rounded-full blur-[120px] animate-aurora"></div>
                         <div className="absolute bottom-[-10%] right-[-10%] w-[80vw] h-[80vw] bg-cyan-400/15 dark:bg-cyan-500/10 rounded-full blur-[100px] animate-aurora" style={{animationDelay: '-5s'}}></div>
                     </div>
@@ -660,10 +680,10 @@
                                     </div>
                                 </div>
 
-                                {/* 底部法语寄语专属标识 */}
+                                {/* 底部专属标识 */}
                                 <div className="mt-16 flex flex-col items-center justify-center opacity-40 pointer-events-none w-full gap-2 select-none">
-                                    <div className="text-[12px] font-serif font-bold tracking-widest text-slate-800 dark:text-slate-200 mb-1 italic">
-                                        Une belle vie se crée par soi-même
+                                    <div className="text-[12px] font-serif font-bold tracking-widest text-slate-800 dark:text-slate-200 mb-1">
+                                        सुन्दरं जीवनं स्वयमेव स्रष्टव्यम्
                                     </div>
                                     <div className="text-[11px] font-black tracking-[0.3em] text-slate-800 dark:text-white">姚银亮独家设计</div>
                                     <div className="text-[8px] font-bold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Exclusively Designed by Yao Yinliang</div>
