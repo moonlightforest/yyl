@@ -2,17 +2,14 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <!-- 核心：移动端 PWA 沉浸式与防缩放配置，viewport-fit=cover 确保穿透灵动岛与底部安全区 -->
+    <!-- 核心：强行突破 iOS 安全区限制，viewport-fit=cover 确保穿透灵动岛与底部触控区 -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     
     <!-- iOS PWA 专属 Meta 标签 -->
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <!-- 关键：black-translucent 是让网页铺满全屏、状态栏透明的唯一配置 -->
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="决策舱PRO">
-    <!-- 移除了 theme-color 标签，防止 iOS 强制填充上下白边/黑边 -->
     
-    <!-- 桌面图标 -->
     <link rel="apple-touch-icon" href="https://api.iconify.design/ph/aperture-fill.svg?color=%236366f1&width=192&height=192">
 
     <title>决策舱 PRO // HOLOGRAPHIC OS</title>
@@ -35,22 +32,25 @@
     <script src="https://unpkg.com/@phosphor-icons/web"></script>
 
     <style>
-        /* 彻底解决 iOS 上下边界问题：锁死根视口，使用 vh/vw 铺满整个物理屏幕 */
+        /* 终极杀招：彻底锁死底层物理视口，杜绝 iOS 任何形式的越界白边或黑边 */
         html, body, #root { 
             margin: 0;
             padding: 0;
             width: 100vw;
             height: 100vh;
-            position: fixed; /* 锁死物理屏幕，禁止 iOS 回弹 */
+            position: fixed; 
             top: 0;
             left: 0;
             overflow: hidden;
-            background-color: transparent; /* 保持透明，让 React 中的极光背景露出来 */
+            background-color: #f8fafc; /* 匹配明亮模式底色，填补任何可能的缝隙 */
             font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             -webkit-font-smoothing: antialiased;
             -webkit-tap-highlight-color: transparent;
             touch-action: manipulation;
         }
+        
+        /* 暗黑模式下底层彻底转黑 */
+        html.dark, html.dark body, html.dark #root { background-color: #050510 !important; }
         
         .custom-scrollbar::-webkit-scrollbar { display: none; }
         .custom-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
@@ -161,6 +161,10 @@
             
             const [libraryDisplayCount, setLibraryDisplayCount] = useState(20);
 
+            // AI 分析状态
+            const [aiAdvice, setAiAdvice] = useState('');
+            const [isAnalyzing, setIsAnalyzing] = useState(false);
+
             const fileInputRef = useRef(null);
 
             useEffect(() => {
@@ -169,7 +173,7 @@
                     if (savedDark !== null) setIsDarkMode(savedDark === 'true');
                     else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) setIsDarkMode(true);
 
-                    const localData = localStorage.getItem('yao_pricing_db_v4');
+                    const localData = localStorage.getItem('yao_pricing_db_v5');
                     if (localData) {
                         const data = JSON.parse(localData);
                         if (data.skus) setSkus(data.skus);
@@ -182,7 +186,6 @@
                 finally { setTimeout(() => setLoading(false), 300); }
             }, []);
 
-            // 全屏背景色控制：剥离 theme-color 依赖，依靠暗色类控制
             useEffect(() => {
                 if (isDarkMode) {
                     document.documentElement.classList.add('dark');
@@ -193,21 +196,19 @@
 
             const saveToLocal = (updates) => {
                 try {
-                    const current = JSON.parse(localStorage.getItem('yao_pricing_db_v4') || '{}');
+                    const current = JSON.parse(localStorage.getItem('yao_pricing_db_v5') || '{}');
                     const newData = { ...current, skus, lastSkuName: selectedSku?.name || "", cart, ...updates };
-                    localStorage.setItem('yao_pricing_db_v4', JSON.stringify(newData));
+                    localStorage.setItem('yao_pricing_db_v5', JSON.stringify(newData));
                 } catch (e) {}
             };
 
             const toggleTheme = () => setIsDarkMode(prev => { const n = !prev; localStorage.setItem('yao_theme_dark', n); return n; });
 
-            // 重置列表显示数量
             useEffect(() => {
                 setLibraryDisplayCount(20);
                 setSwipedSkuName(null);
             }, [searchTerm, activeTab]);
 
-            // 点击空白处释放焦点
             useEffect(() => {
                 const handleClickOutside = (e) => {
                     if (selectedCartIndex === -1) return;
@@ -219,32 +220,6 @@
                 document.addEventListener('mousedown', handleClickOutside);
                 return () => { document.removeEventListener('touchstart', handleClickOutside); document.removeEventListener('mousedown', handleClickOutside); };
             }, [selectedCartIndex]);
-
-            // 键盘穿梭
-            useEffect(() => {
-                const handleKeyDown = (e) => {
-                    if (activeTab !== 'purchase') return;
-                    if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName)) return;
-                    if (cart.length === 0) return;
-                    if (e.key === 'ArrowDown') {
-                        e.preventDefault();
-                        setSelectedCartIndex(prev => {
-                            const next = prev === -1 ? 0 : (prev < cart.length - 1 ? prev + 1 : prev);
-                            setTimeout(() => document.getElementById(`cart-item-${next}`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }), 0);
-                            return next;
-                        });
-                    } else if (e.key === 'ArrowUp') {
-                        e.preventDefault();
-                        setSelectedCartIndex(prev => {
-                            const next = prev === -1 ? cart.length - 1 : (prev > 0 ? prev - 1 : 0);
-                            setTimeout(() => document.getElementById(`cart-item-${next}`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }), 0);
-                            return next;
-                        });
-                    }
-                };
-                window.addEventListener('keydown', handleKeyDown);
-                return () => window.removeEventListener('keydown', handleKeyDown);
-            }, [cart.length, activeTab]);
 
             const handleQuickAddPurchase = (sku, amount) => {
                 if (!sku) return;
@@ -261,6 +236,8 @@
                     saveToLocal({ cart: newCart });
                     return newCart;
                 });
+                // 清理 AI 缓存，由于进货单变动
+                setAiAdvice('');
                 setStatusMsg({ type: 'success', text: amount > 0 ? `已加码 +${amount}` : '资产已载入' });
                 setTimeout(() => setStatusMsg({ type: null, text: '' }), 1000);
             };
@@ -270,6 +247,7 @@
                     const next = prev.map((item, i) => i === idx ? { ...item, qty: Math.max(0, qty) } : item);
                     saveToLocal({ cart: next }); return next;
                 });
+                setAiAdvice('');
             };
 
             const removeFromCart = (index, e) => {
@@ -280,9 +258,10 @@
                     return newCart;
                 });
                 setSelectedCartIndex(-1);
+                setAiAdvice('');
             };
 
-            const clearCart = () => { setCart([]); saveToLocal({ cart: [] }); setSelectedCartIndex(-1); };
+            const clearCart = () => { setCart([]); saveToLocal({ cart: [] }); setSelectedCartIndex(-1); setAiAdvice(''); };
 
             const purchaseStats = useMemo(() => {
                 if (cart.length === 0) return { totalQty: 0, totalCost: 0 };
@@ -290,6 +269,48 @@
                 const totalCost = cart.reduce((sum, item) => sum + (item.sku.cost * item.qty), 0);
                 return { totalQty, totalCost };
             }, [cart]);
+
+            // Gemini API 智能分析调用逻辑
+            const handleAIAnalyze = async () => {
+                if (cart.length === 0) return;
+                setIsAnalyzing(true);
+                setAiAdvice('');
+                try {
+                    const apiKey = ""; // 执行环境会自动注入
+                    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+                    
+                    let cartStr = cart.map(item => `- ${item.sku.name}: ${item.qty}件 (进价￥${item.sku.cost.toFixed(2)})`).join('\n');
+                    const userQuery = `请帮我分析以下进货单数据，总金额￥${purchaseStats.totalCost.toFixed(2)}，总件数${purchaseStats.totalQty}。\n\n进货明细：\n${cartStr}\n\n请给出专业、简练的采购建议和利润优化方向。`;
+                    
+                    const payload = {
+                        contents: [{ parts: [{ text: userQuery }] }],
+                        systemInstruction: { parts: [{ text: "你是一个专业的零售进货分析专家，语气简练、专业、有洞察力。不要使用markdown格式，请用平白连贯的中文回答，字数控制在150字以内。" }] }
+                    };
+
+                    let retries = 3;
+                    let delay = 1000;
+                    let response = null;
+                    while(retries > 0) {
+                        try {
+                            response = await fetch(url, { method: 'POST', body: JSON.stringify(payload), headers: { 'Content-Type': 'application/json' }});
+                            if (response.ok) break;
+                        } catch (e) {}
+                        retries--;
+                        await new Promise(r => setTimeout(r, delay));
+                        delay *= 2;
+                    }
+
+                    if (!response || !response.ok) throw new Error("API Error");
+                    const data = await response.json();
+                    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "分析接口未返回有效建议。";
+                    setAiAdvice(text);
+                } catch (err) {
+                    console.error("AI 接口调用失败:", err);
+                    setAiAdvice('网络链接波动，量子分析接口暂时不可用，请稍后再试。');
+                } finally {
+                    setIsAnalyzing(false);
+                }
+            };
 
             const isQuickAddReady = quickAddName.trim() !== '' && quickAddCost.trim() !== '';
             const activeSku = (selectedCartIndex >= 0 && cart[selectedCartIndex]) ? cart[selectedCartIndex].sku : selectedSku;
@@ -376,7 +397,7 @@
             }, [queryTerm, skus]);
 
             if (loading) return (
-                <div className="fixed inset-0 bg-slate-50 dark:bg-[#050510] flex flex-col items-center justify-center gap-6">
+                <div className="absolute inset-0 bg-slate-50 dark:bg-[#050510] flex flex-col items-center justify-center gap-6">
                     <div className="relative">
                         <div className="absolute inset-0 bg-indigo-400 dark:bg-cyan-400 rounded-full blur-xl opacity-50 animate-pulse"></div>
                         <i className="ph-bold ph-aperture ph-spin text-indigo-600 dark:text-cyan-300 text-[60px] relative z-10"></i>
@@ -386,10 +407,10 @@
 
             // ================== Main Render ==================
             return (
-                <div className={`absolute inset-0 w-full h-full flex flex-col font-sans antialiased text-slate-800 dark:text-slate-100 overflow-hidden select-none ${isDarkMode ? 'dark' : ''}`}>
+                <div className={`w-full h-full flex flex-col font-sans antialiased text-slate-800 dark:text-slate-100 select-none ${isDarkMode ? 'dark' : ''}`}>
                     
-                    {/* 背景极光 (绝对定位，贯穿铺满全屏所有区域包括安全区) */}
-                    <div className="absolute inset-0 z-0 bg-slate-50 dark:bg-[#050510] pointer-events-none w-full h-full">
+                    {/* 背景极光 (绝对定位，贯穿铺满物理全屏) */}
+                    <div className="absolute inset-0 z-0 pointer-events-none w-full h-full">
                         <div className="absolute top-[-20%] left-[-10%] w-[100vw] h-[100vw] bg-indigo-500/20 dark:bg-indigo-600/20 rounded-full blur-[120px] animate-aurora"></div>
                         <div className="absolute bottom-[-10%] right-[-10%] w-[80vw] h-[80vw] bg-cyan-400/15 dark:bg-cyan-500/10 rounded-full blur-[100px] animate-aurora" style={{animationDelay: '-5s'}}></div>
                     </div>
@@ -459,6 +480,34 @@
                                                     ￥{Math.max(...cart.map(i=>i.sku.cost)).toFixed(2)}
                                                 </span>
                                             </div>
+                                        </div>
+
+                                        {/* 接入 Gemini AI 诊断功能 */}
+                                        <div className={`${UI_STYLE.card} p-5 flex flex-col gap-4`}>
+                                            <div className="flex items-center justify-between opacity-80">
+                                                <div className="flex items-center gap-2">
+                                                    <i className="ph-fill ph-magic-wand text-lg text-indigo-500"></i>
+                                                    <span className="text-xs font-black uppercase tracking-widest text-indigo-600 dark:text-cyan-400">AI 智能采购诊断</span>
+                                                </div>
+                                            </div>
+                                            
+                                            {aiAdvice ? (
+                                                <div className="bg-white/50 dark:bg-black/20 rounded-2xl p-4 text-sm leading-relaxed border border-indigo-100 dark:border-white/5 shadow-inner whitespace-pre-wrap font-medium">
+                                                    {aiAdvice}
+                                                </div>
+                                            ) : (
+                                                <button 
+                                                    onClick={handleAIAnalyze} 
+                                                    disabled={isAnalyzing}
+                                                    className={`w-full py-4 rounded-2xl font-black text-sm ios-btn-active shadow-lg transition-all ${isAnalyzing ? 'bg-slate-200 dark:bg-slate-800 text-slate-400' : 'bg-gradient-to-r from-indigo-500 to-purple-500 text-white shadow-indigo-500/30'}`}
+                                                >
+                                                    {isAnalyzing ? (
+                                                        <span className="flex items-center justify-center gap-2"><i className="ph-bold ph-spinner animate-spin"></i> 正在连接量子计算节点...</span>
+                                                    ) : (
+                                                        <span className="flex items-center justify-center gap-2"><i className="ph-bold ph-sparkle"></i> 生成全息进货建议</span>
+                                                    )}
+                                                </button>
+                                            )}
                                         </div>
 
                                         <div className={`${UI_STYLE.card} p-5 space-y-5`}>
@@ -680,10 +729,10 @@
                                     </div>
                                 </div>
 
-                                {/* 底部专属标识 */}
+                                {/* 底部法语寄语专属标识 */}
                                 <div className="mt-16 flex flex-col items-center justify-center opacity-40 pointer-events-none w-full gap-2 select-none">
-                                    <div className="text-[12px] font-serif font-bold tracking-widest text-slate-800 dark:text-slate-200 mb-1">
-                                        सुन्दरं जीवनं स्वयमेव स्रष्टव्यम्
+                                    <div className="text-[12px] font-serif font-bold tracking-widest text-slate-800 dark:text-slate-200 mb-1 italic">
+                                        Une belle vie se crée par soi-même
                                     </div>
                                     <div className="text-[11px] font-black tracking-[0.3em] text-slate-800 dark:text-white">姚银亮独家设计</div>
                                     <div className="text-[8px] font-bold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Exclusively Designed by Yao Yinliang</div>
