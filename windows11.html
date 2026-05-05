@@ -163,14 +163,19 @@
             
             const [activeView, setActiveView] = useState('workspace'); // workspace, history, owed, analytics, database
             
-            // 搜索与选中状态
+            // 搜索与选中状态 (已修复遗漏的状态变量)
             const [queryTerm, setQueryTerm] = useState('');
             const [showQueryDropdown, setShowQueryDropdown] = useState(false);
             const [selectedCartIndex, setSelectedCartIndex] = useState(-1);
+            
+            // 搜索下拉框键盘选择状态
             const [highlightedSuggestionIndex, setHighlightedSuggestionIndex] = useState(-1);
             
             // 资产管理状态
             const [searchTerm, setSearchTerm] = useState('');
+            const [categoryFilter, setCategoryFilter] = useState('All'); 
+            const [sortConfig, setSortConfig] = useState({ key: null, direction: 'ascending' }); 
+            
             const [quickAddName, setQuickAddName] = useState('');
             const [quickAddCost, setQuickAddCost] = useState('');
             const [editingSkuName, setEditingSkuName] = useState(null);
@@ -183,12 +188,12 @@
             const [showClearConfirm, setShowClearConfirm] = useState(false);
             const [statusMsg, setStatusMsg] = useState({ type: null, text: '' });
             
-            // [新增] 自定义弹窗状态 (替代系统默认的 alert/confirm，解决沙盒环境拦截)
+            // 自定义弹窗状态
             const [dialog, setDialog] = useState({ visible: false, title: '', message: '', onConfirm: null, isAlert: false });
             
             const [contextMenu, setContextMenu] = useState({ visible: false, x: 0, y: 0, listId: null, view: '' });
             const [remarkTooltip, setRemarkTooltip] = useState({ visible: false, x: 0, y: 0, text: '' });
-            const [importText, setImportText] = useState(''); // 指令控制台输入
+            const [importText, setImportText] = useState(''); 
 
             const fileInputRef = useRef(null);
 
@@ -227,7 +232,7 @@
 
             const showToast = (text, type = 'success') => {
                 setStatusMsg({ type, text });
-                setTimeout(() => setStatusMsg({ type: null, text: '' }), 4000); // 延长提示时间
+                setTimeout(() => setStatusMsg({ type: null, text: '' }), 4000); 
             };
 
             useEffect(() => {
@@ -518,6 +523,47 @@
                 return Array.from(cats);
             }, [skus]);
 
+            // 资产矩阵：排序处理器
+            const handleSort = (key) => {
+                let direction = 'ascending';
+                if (sortConfig.key === key && sortConfig.direction === 'ascending') direction = 'descending';
+                setSortConfig({ key, direction });
+            };
+
+            // 资产矩阵：排序图标渲染器
+            const getSortIcon = (columnName) => {
+                if (sortConfig.key !== columnName) return <i className="ph-bold ph-caret-up-down text-gray-300 dark:text-gray-600 opacity-0 group-hover:opacity-100 transition-opacity"></i>;
+                if (sortConfig.direction === 'ascending') return <i className="ph-bold ph-caret-up text-win-accent dark:text-win-accentDark"></i>;
+                return <i className="ph-bold ph-caret-down text-win-accent dark:text-win-accentDark"></i>;
+            };
+
+            // 资产矩阵：综合过滤与排序引擎
+            const processedSkus = useMemo(() => {
+                let sortableSkus = [...skus];
+                
+                if (searchTerm) sortableSkus = sortableSkus.filter(s => s.name.toLowerCase().includes(searchTerm.toLowerCase()));
+                
+                if (categoryFilter !== 'All') sortableSkus = sortableSkus.filter(s => (s.category || '未分类') === categoryFilter);
+                
+                if (sortConfig.key !== null) {
+                    sortableSkus.sort((a, b) => {
+                        let aValue = a[sortConfig.key];
+                        let bValue = b[sortConfig.key];
+
+                        if (sortConfig.key === 'category') {
+                            aValue = aValue || '未分类'; bValue = bValue || '未分类';
+                        } else if (sortConfig.key === 'name') {
+                            aValue = aValue.toLowerCase(); bValue = bValue.toLowerCase();
+                        }
+
+                        if (aValue < bValue) return sortConfig.direction === 'ascending' ? -1 : 1;
+                        if (aValue > bValue) return sortConfig.direction === 'ascending' ? 1 : -1;
+                        return 0;
+                    });
+                }
+                return sortableSkus;
+            }, [skus, searchTerm, categoryFilter, sortConfig]);
+
             const handleEditCategory = (skuName, newCat) => {
                 const val = newCat.trim() || '未分类';
                 const updatedSkus = skus.map(s => s.name === skuName ? { ...s, category: val } : s);
@@ -567,7 +613,6 @@
                 if (!raw.trim()) return;
                 const str = raw.trim();
                 
-                // 尝试解析是否为全量备份密钥 (Base64)
                 try {
                     const cleanStr = str.replace(/\s+/g, '');
                     const decoded = decodeURIComponent(atob(cleanStr));
@@ -705,7 +750,6 @@
                                 <span className="flex-1 text-left">欠货追踪大盘</span>
                                 {owedItems.length > 0 && <span className="text-[10px] bg-orange-500 text-white px-1.5 rounded">{owedItems.length}</span>}
                             </button>
-                            {/* V3.0 新增数据魔方 */}
                             <button onClick={() => setActiveView('analytics')} className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] transition-colors ${activeView === 'analytics' ? 'bg-black/5 dark:bg-white/10 font-bold text-gray-900 dark:text-white' : 'text-gray-600 dark:text-gray-400 hover:bg-black/5 dark:hover:bg-white/5'}`}>
                                 <i className={`ph-bold ph-chart-pie-slice text-[16px] ${activeView === 'analytics' ? 'text-emerald-500' : ''}`}></i>
                                 数据魔方分析
@@ -1219,31 +1263,51 @@
                                         </div>
 
                                         <div className={`${winCard} flex-1 flex flex-col overflow-hidden min-h-0`}>
-                                            <div className="p-3 border-b border-black/5 dark:border-white/5 bg-black/[0.02] dark:bg-white/[0.02] shrink-0">
-                                                <div className="relative">
-                                                    <i className="ph-bold ph-funnel absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"></i>
+                                            <div className="p-3 border-b border-black/5 dark:border-white/5 bg-black/[0.02] dark:bg-white/[0.02] shrink-0 flex gap-2">
+                                                <div className="relative flex-1">
+                                                    <i className="ph-bold ph-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"></i>
                                                     <input 
                                                         type="text" 
                                                         className={`${winInput} pl-9 border-transparent shadow-none bg-transparent hover:bg-black/5 dark:hover:bg-white/5 focus:bg-white dark:focus:bg-[#1f1f1f] text-[13px] h-[36px]`} 
-                                                        placeholder="全局滤镜过滤..." 
+                                                        placeholder="全局搜寻实体名称..." 
                                                         value={searchTerm} 
                                                         onChange={e => setSearchTerm(e.target.value)} 
                                                     />
+                                                </div>
+                                                <div className="relative shrink-0 w-48">
+                                                    <i className="ph-bold ph-funnel absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"></i>
+                                                    <select
+                                                        className={`${winInput} pl-9 pr-8 border-transparent shadow-none bg-transparent hover:bg-black/5 dark:hover:bg-white/5 focus:bg-white dark:focus:bg-[#1f1f1f] text-[13px] h-[36px] cursor-pointer appearance-none outline-none`}
+                                                        value={categoryFilter}
+                                                        onChange={e => setCategoryFilter(e.target.value)}
+                                                    >
+                                                        <option value="All">全部分类</option>
+                                                        {allCategories.map(cat => (
+                                                            <option key={cat} value={cat}>{cat}</option>
+                                                        ))}
+                                                    </select>
+                                                    <i className="ph-bold ph-caret-down absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none text-[10px]"></i>
                                                 </div>
                                             </div>
                                             
                                             <div className="flex-1 overflow-y-auto custom-scrollbar relative">
                                                 <table className="w-full text-left border-collapse">
-                                                    <thead className="sticky top-0 bg-white/95 dark:bg-[#2d2d2d]/95 backdrop-blur z-10 text-[11px] text-gray-500 uppercase border-b border-black/5 dark:border-white/5 shadow-sm">
+                                                    <thead className="sticky top-0 bg-white/95 dark:bg-[#2d2d2d]/95 backdrop-blur z-10 text-[11px] text-gray-500 uppercase border-b border-black/5 dark:border-white/5 shadow-sm select-none">
                                                         <tr>
-                                                            <th className="font-bold px-6 py-3 w-[40%] whitespace-nowrap">实体名称</th>
-                                                            <th className="font-bold px-6 py-3 w-[20%] text-center whitespace-nowrap">分类</th>
-                                                            <th className="font-bold px-6 py-3 w-[25%] text-right whitespace-nowrap">基准进价 / 历史波动</th>
+                                                            <th className="font-bold px-6 py-3 w-[40%] whitespace-nowrap cursor-pointer hover:bg-black/5 dark:hover:bg-white/5 transition-colors group" onClick={() => handleSort('name')}>
+                                                                <div className="flex items-center gap-1">实体名称 {getSortIcon('name')}</div>
+                                                            </th>
+                                                            <th className="font-bold px-6 py-3 w-[20%] text-center whitespace-nowrap cursor-pointer hover:bg-black/5 dark:hover:bg-white/5 transition-colors group" onClick={() => handleSort('category')}>
+                                                                <div className="flex items-center justify-center gap-1">分类 {getSortIcon('category')}</div>
+                                                            </th>
+                                                            <th className="font-bold px-6 py-3 w-[25%] text-right whitespace-nowrap cursor-pointer hover:bg-black/5 dark:hover:bg-white/5 transition-colors group" onClick={() => handleSort('cost')}>
+                                                                <div className="flex items-center justify-end gap-1">基准进价 / 历史波动 {getSortIcon('cost')}</div>
+                                                            </th>
                                                             <th className="font-bold px-6 py-3 w-[15%] text-center whitespace-nowrap">操作</th>
                                                         </tr>
                                                     </thead>
                                                     <tbody className="text-[13px] text-gray-800 dark:text-gray-200">
-                                                        {skus.filter(s => s.name.toLowerCase().includes(searchTerm.toLowerCase())).map((sku, idx) => (
+                                                        {processedSkus.map((sku, idx) => (
                                                             <tr key={idx} className="border-b border-black/5 dark:border-white/5 hover:bg-black/5 dark:hover:bg-white/5 transition-colors group">
                                                                 <td className="px-6 py-3.5 font-bold truncate max-w-[200px]">{sku.name}</td>
                                                                 <td className="px-6 py-3.5 text-center whitespace-nowrap relative">
@@ -1398,7 +1462,7 @@
                         </div>
                     )}
 
-                    {/* [新增] 全局系统交互弹窗 (替代浏览器原生 alert/confirm) */}
+                    {/* 全局系统交互弹窗 (替代浏览器原生 alert/confirm) */}
                     {dialog.visible && (
                         <div className="absolute inset-0 z-[10000] flex items-center justify-center bg-black/40 backdrop-blur-sm animate-in fade-in">
                             <div className={`${winCard} p-6 w-[400px] shadow-2xl flex flex-col gap-4 scale-100 animate-in zoom-in-95`}>
