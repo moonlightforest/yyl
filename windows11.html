@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>润晟软件 V2.2 // Windows 11 Edition</title>
+    <title>润晟软件 V3.0 // Windows 11 Edition</title>
     
     <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
@@ -99,9 +99,11 @@
         const { useState, useMemo, useRef, useEffect, useCallback } = React;
 
         const SEED_DATA = [
-            { name: "示例：3D立体本", cost: 0.70, category: "本子" },
-            { name: "示例：98K中性笔", cost: 0.50, category: "中性笔" },
+            { name: "示例：3D立体本", cost: 0.70, category: "本子", priceHistory: [] },
+            { name: "示例：98K中性笔", cost: 0.50, category: "中性笔", priceHistory: [] },
         ];
+
+        const CHART_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#f97316', '#ec4899'];
 
         // 动态数值组件
         const AnimatedNumber = ({ value, format = (v) => v.toFixed(2), className }) => {
@@ -122,6 +124,29 @@
             return <span className={className}>{format(displayValue)}</span>;
         };
 
+        // 自定义精简版 SVG 饼图组件
+        const SvgPieChart = ({ data }) => {
+            const total = data.reduce((sum, d) => sum + d.value, 0);
+            if(total === 0 || data.length === 0) return <div className="w-full h-full flex items-center justify-center text-gray-400 font-bold text-sm">暂无数据分布</div>;
+            let cumulativePercent = 0;
+            return (
+                <svg viewBox="-1 -1 2 2" className="w-full h-full" style={{ transform: 'rotate(-90deg)' }}>
+                    {data.map((slice, i) => {
+                        const percent = slice.value / total;
+                        if (percent === 1) return <circle r="1" fill={slice.color} key={slice.label} />;
+                        const startX = Math.cos(2 * Math.PI * cumulativePercent);
+                        const startY = Math.sin(2 * Math.PI * cumulativePercent);
+                        cumulativePercent += percent;
+                        const endX = Math.cos(2 * Math.PI * cumulativePercent);
+                        const endY = Math.sin(2 * Math.PI * cumulativePercent);
+                        const largeArcFlag = percent > 0.5 ? 1 : 0;
+                        const pathData = [`M 0 0`, `L ${startX} ${startY}`, `A 1 1 0 ${largeArcFlag} 1 ${endX} ${endY}`, `Z`].join(' ');
+                        return <path d={pathData} fill={slice.color} key={slice.label} className="hover:opacity-80 transition-opacity cursor-pointer" />;
+                    })}
+                </svg>
+            )
+        };
+
         function App() {
             // Windows 11 UI 风格类
             const winCard = "bg-white/80 dark:bg-[#2d2d2d]/80 backdrop-blur-xl border border-black/5 dark:border-white/10 shadow-sm rounded-xl transition-all";
@@ -136,14 +161,12 @@
             const [cart, setCart] = useState([]);
             const [savedLists, setSavedLists] = useState([]); 
             
-            const [activeView, setActiveView] = useState('workspace'); // workspace, history, database, owed
+            const [activeView, setActiveView] = useState('workspace'); // workspace, history, owed, analytics, database
             
             // 搜索与选中状态
             const [queryTerm, setQueryTerm] = useState('');
             const [showQueryDropdown, setShowQueryDropdown] = useState(false);
             const [selectedCartIndex, setSelectedCartIndex] = useState(-1);
-            
-            // 搜索下拉框键盘选择状态
             const [highlightedSuggestionIndex, setHighlightedSuggestionIndex] = useState(-1);
             
             // 资产管理状态
@@ -160,11 +183,12 @@
             const [showClearConfirm, setShowClearConfirm] = useState(false);
             const [statusMsg, setStatusMsg] = useState({ type: null, text: '' });
             
-            // 右键菜单状态 (新增 view 标识区分来源)
+            // [新增] 自定义弹窗状态 (替代系统默认的 alert/confirm，解决沙盒环境拦截)
+            const [dialog, setDialog] = useState({ visible: false, title: '', message: '', onConfirm: null, isAlert: false });
+            
             const [contextMenu, setContextMenu] = useState({ visible: false, x: 0, y: 0, listId: null, view: '' });
-
-            // 悬浮备注提示状态
             const [remarkTooltip, setRemarkTooltip] = useState({ visible: false, x: 0, y: 0, text: '' });
+            const [importText, setImportText] = useState(''); // 指令控制台输入
 
             const fileInputRef = useRef(null);
 
@@ -203,22 +227,40 @@
 
             const showToast = (text, type = 'success') => {
                 setStatusMsg({ type, text });
-                setTimeout(() => setStatusMsg({ type: null, text: '' }), 2500);
+                setTimeout(() => setStatusMsg({ type: null, text: '' }), 4000); // 延长提示时间
             };
 
-            // 全局点击空白处释放焦点，关闭右键菜单
             useEffect(() => {
                 const handleClickOutside = (e) => {
                     if (contextMenu.visible) setContextMenu({ visible: false, x: 0, y: 0, listId: null });
-                    
                     if (selectedCartIndex === -1) return;
-                    if (!e.target.closest('.cart-item-row') && !e.target.closest('.quick-add-controls')) {
-                        setSelectedCartIndex(-1);
-                    }
+                    if (!e.target.closest('.cart-item-row') && !e.target.closest('.quick-add-controls')) setSelectedCartIndex(-1);
                 };
                 document.addEventListener('mousedown', handleClickOutside);
                 return () => document.removeEventListener('mousedown', handleClickOutside);
             }, [selectedCartIndex, contextMenu.visible]);
+
+            // V3.0 价格预警与历史记录计算核心引擎
+            const checkPriceWarning = (skuName, newCost) => {
+                const existing = skus.find(s => s.name === skuName);
+                if(existing) {
+                    const hist = existing.priceHistory || [];
+                    const avg = hist.length > 0 ? (hist.reduce((sum, h)=>sum+h.cost,0) + existing.cost) / (hist.length + 1) : existing.cost;
+                    if(newCost > avg * 1.1) {
+                        showToast(`⚠️ 警报：[${skuName}] 历史均价为￥${avg.toFixed(2)}，本次进价偏高！`, 'warning');
+                    } else if (hist.length > 0 && newCost < avg * 0.9) {
+                        showToast(`📉 提示：[${skuName}] 本次进价低于历史均价￥${avg.toFixed(2)}。`, 'success');
+                    }
+                }
+            };
+
+            const recordPriceHistory = (existingSku, newCost) => {
+                if (existingSku.cost === newCost) return existingSku;
+                const hist = existingSku.priceHistory || [];
+                const d = new Date();
+                const dateStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+                return { ...existingSku, cost: newCost, priceHistory: [...hist, { date: dateStr, cost: existingSku.cost }] };
+            };
 
             // ---- 核心进货业务逻辑 ----
             const handleQuickAddPurchase = (sku, amount) => {
@@ -276,93 +318,82 @@
             // ---- 清单存档与流水逻辑 ----
             const handleSaveList = () => {
                 if (cart.length === 0) {
-                    showToast('清单为空，无法存档', 'error');
+                    showToast('清单为空，无法存档', 'warning');
                     return;
                 }
                 const firstItemName = cart[0].sku.name;
                 const date = new Date();
-                const timeStr = `${date.getMonth()+1}-${date.getDate()} ${date.getHours()}:${String(date.getMinutes()).padStart(2, '0')}`;
+                const timeStr = `${date.getFullYear()}-${date.getMonth()+1}-${date.getDate()} ${date.getHours()}:${String(date.getMinutes()).padStart(2, '0')}`;
                 
                 const newList = {
                     id: Date.now(),
-                    name: `${firstItemName} 批次`, // 名称稍作修饰
-                    items: cart.map(i => ({ ...i, isOwed: false })), // 增加欠货标记位
+                    name: `${firstItemName} 批次`, 
+                    items: cart.map(i => ({ ...i, isOwed: false })), 
                     totalQty: purchaseStats.totalQty,
                     totalCost: purchaseStats.totalCost,
                     timestamp: timeStr,
-                    hiddenFromWorkspace: false // 新增面板隐藏标记
+                    hiddenFromWorkspace: false
                 };
                 
                 setSavedLists(prev => {
                     let combined = [newList, ...prev];
-                    // V2.2 核心保护：超出50条时，将拥有欠款的列表与正常列表分离处理
                     if (combined.length > 50) {
                         const owedLists = combined.filter(l => l.items.some(i => i.isOwed));
                         const normalLists = combined.filter(l => !l.items.some(i => i.isOwed));
-                        // 始终保留全部 owedLists，用 normalLists 补足最多至 50（如果 owed 已经超过50，则数量会变大）
                         const allowedNormalCount = Math.max(0, 50 - owedLists.length);
                         const keptNormal = normalLists.slice(0, allowedNormalCount);
-                        combined = [...owedLists, ...keptNormal].sort((a, b) => b.id - a.id); // 维持时间倒序
+                        combined = [...owedLists, ...keptNormal].sort((a, b) => b.id - a.id);
                     }
                     saveToLocal({ savedLists: combined, cart: [] });
                     return combined;
                 });
                 
-                setCart([]); // 存完后自动清空工作台
-                setSelectedCartIndex(-1);
+                setCart([]); setSelectedCartIndex(-1);
                 showToast(`已归档并生成流水记录：${newList.name}`);
             };
 
             const handleLoadList = (list) => {
-                if (cart.length > 0 && !window.confirm('加载历史清单将覆盖当前工作台上的所有数据，是否继续？')) {
-                    return;
+                const loadAction = () => {
+                    const cleanItems = list.items.map(item => { const { isOwed, ...rest } = item; return rest; });
+                    setCart(cleanItems); saveToLocal({ cart: cleanItems }); setSelectedCartIndex(-1);
+                    setActiveView('workspace'); showToast(`成功恢复清单：${list.name}`);
+                };
+                if (cart.length > 0) {
+                    setDialog({ visible: true, title: '覆盖警告', message: '加载历史清单将覆盖当前工作台上的所有数据，是否继续？', onConfirm: loadAction });
+                } else {
+                    loadAction();
                 }
-                // 忽略被标记为欠货的UI状态，单纯载入内容
-                const cleanItems = list.items.map(item => {
-                    const { isOwed, ...rest } = item;
-                    return rest;
-                });
-                setCart(cleanItems);
-                saveToLocal({ cart: cleanItems });
-                setSelectedCartIndex(-1);
-                setActiveView('workspace'); // 无论在哪，加载后自动切回工作台
-                showToast(`成功恢复清单：${list.name}`);
             };
 
             const handleDeleteList = (id) => {
-                // V2.2 核心保护：拦截带有欠货记录的删除操作
                 const listToDelete = savedLists.find(l => l.id === id);
                 if (listToDelete && listToDelete.items.some(i => i.isOwed)) {
-                    alert('【系统拦截】\n该记录中包含未处理的欠货商品！\n请先前往「欠货追踪大盘」解除所有欠款状态后，方可彻底销毁此清单。');
+                    setDialog({ visible: true, isAlert: true, title: '【系统拦截】', message: '该记录中包含未处理的欠货商品！\n请先前往「欠货追踪大盘」解除所有欠款状态后，方可彻底销毁此清单。' });
                     return;
                 }
-
                 setSavedLists(prev => {
-                    const next = prev.filter(l => l.id !== id);
-                    saveToLocal({ savedLists: next });
-                    return next;
+                    const next = prev.filter(l => l.id !== id); saveToLocal({ savedLists: next }); return next;
                 });
                 showToast('已从历史节点销毁该记录');
             };
 
             const handleClearAllLists = () => {
-                // V2.2 核心保护：智能清空，过滤保留欠货记录
-                if(window.confirm('警告：您确定要清空历史存档流水吗？\n\n(系统保护已开启：包含欠货记录的清单将被自动保留，仅清空无欠货的普通流水。)')) {
-                    setSavedLists(prev => {
-                        const remaining = prev.filter(list => list.items.some(item => item.isOwed));
-                        saveToLocal({ savedLists: remaining });
-                        return remaining;
-                    });
-                    showToast('清理完成，欠款清单已自动保留');
-                }
+                setDialog({
+                    visible: true, title: '格式化警告', message: '警告：您确定要清空历史存档流水吗？\n\n(系统保护已开启：包含欠货记录的清单将被自动保留，仅清空无欠货的普通流水。)',
+                    onConfirm: () => {
+                        setSavedLists(prev => {
+                            const remaining = prev.filter(list => list.items.some(item => item.isOwed));
+                            saveToLocal({ savedLists: remaining }); return remaining;
+                        });
+                        showToast('清理完成，欠款清单已自动保留');
+                    }
+                });
             };
 
-            // ---- 工作台专属隐藏逻辑 (V2.3 核心新增，不删底层数据) ----
             const handleHideListInWorkspace = (id) => {
                 setSavedLists(prev => {
                     const next = prev.map(l => l.id === id ? { ...l, hiddenFromWorkspace: true } : l);
-                    saveToLocal({ savedLists: next });
-                    return next;
+                    saveToLocal({ savedLists: next }); return next;
                 });
                 showToast('已从近期面板移除');
             };
@@ -370,8 +401,7 @@
             const handleHideAllInWorkspace = () => {
                 setSavedLists(prev => {
                     const next = prev.map(l => ({ ...l, hiddenFromWorkspace: true }));
-                    saveToLocal({ savedLists: next });
-                    return next;
+                    saveToLocal({ savedLists: next }); return next;
                 });
                 showToast('近期面板记录已清空');
             };
@@ -385,11 +415,8 @@
                             const newItems = [...list.items];
                             const currentItem = newItems[itemIndex];
                             const toggledState = !currentItem.isOwed;
-                            
                             newItems[itemIndex] = { 
-                                ...currentItem, 
-                                isOwed: toggledState,
-                                // 初始化欠货状态参数
+                                ...currentItem, isOwed: toggledState,
                                 owedQty: toggledState ? (currentItem.owedQty !== undefined ? currentItem.owedQty : currentItem.qty) : currentItem.owedQty,
                                 owedModifyCount: toggledState ? (currentItem.owedModifyCount || 0) : currentItem.owedModifyCount,
                                 owedRemark: toggledState ? (currentItem.owedRemark || '') : currentItem.owedRemark
@@ -399,14 +426,11 @@
                         }
                         return list;
                     });
-                    saveToLocal({ savedLists: next });
-                    return next;
+                    saveToLocal({ savedLists: next }); return next;
                 });
-                if (isNowOwed) showToast('已标记为欠货单品', 'warning');
-                else showToast('欠货记录已解除');
+                if (isNowOwed) showToast('已标记为欠货单品', 'warning'); else showToast('欠货记录已解除');
             };
 
-            // 更新欠货明细属性 (数量、备注)
             const handleUpdateOwedItem = (listId, itemIndex, updates) => {
                 setSavedLists(prev => {
                     const next = prev.map(list => {
@@ -417,27 +441,20 @@
                         }
                         return list;
                     });
-                    saveToLocal({ savedLists: next });
-                    return next;
+                    saveToLocal({ savedLists: next }); return next;
                 });
                 showToast('欠货单数据已更新');
             };
 
-            // 聚合并展平所有欠货商品
             const owedItems = useMemo(() => {
                 const result = [];
                 savedLists.forEach(list => {
                     list.items.forEach((item, idx) => {
                         if (item.isOwed) {
                             result.push({
-                                listId: list.id,
-                                listName: list.name,
-                                listTimestamp: list.timestamp,
-                                itemIndex: idx,
-                                ...item,
-                                currentOwedQty: item.owedQty !== undefined ? item.owedQty : item.qty,
-                                modifyCount: item.owedModifyCount || 0,
-                                remark: item.owedRemark || ''
+                                listId: list.id, listName: list.name, listTimestamp: list.timestamp, itemIndex: idx,
+                                ...item, currentOwedQty: item.owedQty !== undefined ? item.owedQty : item.qty,
+                                modifyCount: item.owedModifyCount || 0, remark: item.owedRemark || ''
                             });
                         }
                     });
@@ -450,6 +467,29 @@
                 owedItems.forEach(i => { qty += i.currentOwedQty; cost += i.currentOwedQty * i.sku.cost; });
                 return { qty, cost };
             }, [owedItems]);
+
+            // ---- V3.0 数据魔方 (Data Cube) 分析引擎 ----
+            const analyticsData = useMemo(() => {
+                const categoryStats = {};
+                let totalCost = 0;
+                let totalQty = 0;
+                savedLists.forEach(list => {
+                    list.items.forEach(item => {
+                        const cat = item.sku.category || '未分类';
+                        const cost = item.sku.cost * item.qty;
+                        if(!categoryStats[cat]) categoryStats[cat] = { label: cat, value: 0, qty: 0 };
+                        categoryStats[cat].value += cost;
+                        categoryStats[cat].qty += item.qty;
+                        totalCost += cost;
+                        totalQty += item.qty;
+                    });
+                });
+                // Sort by value descending and assign colors
+                const sorted = Object.values(categoryStats).sort((a,b)=>b.value - a.value).map((cat, idx) => ({
+                    ...cat, color: CHART_COLORS[idx % CHART_COLORS.length]
+                }));
+                return { pieData: sorted, totalCost, totalQty };
+            }, [savedLists]);
 
             // ---- 下拉交互 ----
             const querySuggestions = useMemo(() => {
@@ -472,7 +512,6 @@
                 }
             }, [highlightedCatIndex]);
 
-            // ---- 分类管理逻辑 ----
             const allCategories = useMemo(() => {
                 const cats = new Set(['未分类']);
                 skus.forEach(s => { if (s.category) cats.add(s.category); });
@@ -482,9 +521,7 @@
             const handleEditCategory = (skuName, newCat) => {
                 const val = newCat.trim() || '未分类';
                 const updatedSkus = skus.map(s => s.name === skuName ? { ...s, category: val } : s);
-                setSkus(updatedSkus);
-                saveToLocal({ skus: updatedSkus });
-                setEditingCategorySkuName(null);
+                setSkus(updatedSkus); saveToLocal({ skus: updatedSkus }); setEditingCategorySkuName(null);
             };
 
             // ---- 数据库业务逻辑 ----
@@ -494,21 +531,25 @@
                 if (!isQuickAddReady) return;
                 const costNum = parseFloat(quickAddCost.replace(/[^\d.]/g, ''));
                 if (isNaN(costNum)) return;
-                const newSku = { name: quickAddName, cost: costNum, category: "未分类" };
-                const newSkus = skus.some(s => s.name === quickAddName) ? skus.map(s => s.name === quickAddName ? newSku : s) : [newSku, ...skus]; 
+                checkPriceWarning(quickAddName, costNum);
+                let isNew = true;
+                const newSkus = skus.map(s => {
+                    if(s.name === quickAddName) { isNew = false; return recordPriceHistory(s, costNum); }
+                    return s;
+                });
+                if(isNew) newSkus.unshift({ name: quickAddName, cost: costNum, category: "未分类", priceHistory: [] });
                 setSkus(newSkus); setQuickAddName(''); setQuickAddCost('');
                 saveToLocal({ skus: newSkus });
-                showToast(`已注册新资产: ${quickAddName}`);
+                showToast(`已注册资产并写入矩阵: ${quickAddName}`);
                 document.getElementById('add-sku-name')?.focus();
             };
 
             const handleEditCost = () => {
                 const newCost = parseFloat(editingCostValue.replace(/[^\d.]/g, ''));
                 if (isNaN(newCost)) return;
-                const updatedSkus = skus.map(s => s.name === editingSkuName ? { ...s, cost: newCost } : s);
-                setSkus(updatedSkus);
-                saveToLocal({ skus: updatedSkus });
-                setEditingSkuName(null);
+                checkPriceWarning(editingSkuName, newCost);
+                const updatedSkus = skus.map(s => s.name === editingSkuName ? recordPriceHistory(s, newCost) : s);
+                setSkus(updatedSkus); saveToLocal({ skus: updatedSkus }); setEditingSkuName(null);
             };
 
             const handleDeleteSku = (name) => {
@@ -518,30 +559,71 @@
 
             const handleClearAllSkus = () => {
                 setSkus([]); setCart([]); saveToLocal({ skus: [], cart: [] });
-                setShowClearConfirm(false);
-                showToast('数据库矩阵已重置');
+                setShowClearConfirm(false); showToast('数据库矩阵已重置');
             };
 
+            // V3.0 核心备份流转引擎：智能识别 CSV 还是 备份 JSON
             const handleDataProcess = (raw) => {
                 if (!raw.trim()) return;
-                const lines = raw.split(/\r?\n/).filter(l => l.trim() !== "");
+                const str = raw.trim();
+                
+                // 尝试解析是否为全量备份密钥 (Base64)
+                try {
+                    const cleanStr = str.replace(/\s+/g, '');
+                    const decoded = decodeURIComponent(atob(cleanStr));
+                    const data = JSON.parse(decoded);
+                    if(data.skus && Array.isArray(data.skus)) {
+                        setDialog({
+                            visible: true, title: '全量恢复确认', message: '检测到全量备份密钥！\n\n导入将覆盖当前全部资产矩阵和历史记录，确认恢复吗？',
+                            onConfirm: () => {
+                                setSkus(data.skus); setCart(data.cart || []); setSavedLists(data.savedLists || []);
+                                saveToLocal(data); showToast('系统全量数据已瞬间复原！'); setImportText('');
+                            }
+                        });
+                        return;
+                    }
+                } catch(e) { /* 非密钥，进入普通CSV解析 */ }
+
+                const lines = str.split(/\r?\n/).filter(l => l.trim() !== "");
                 const results = lines.map((line) => {
                     let parts = line.includes('\t') ? line.split('\t') : (line.includes(',') ? line.split(',') : line.split(/\s{2,}/));
                     parts = parts.map(p => p.trim()).filter(p => p !== "");
                     if (parts.length < 2) return null;
                     const price = parseFloat(parts[1].replace(/[^\d.]/g, ''));
                     if (isNaN(price)) return null;
-                    return { name: parts[0], cost: price, category: parts[2] || "未分类" };
+                    return { name: parts[0], cost: price, category: parts[2] || "未分类", priceHistory: [] };
                 }).filter(x => x);
                 if (results.length > 0) {
                     const newSkusMap = new Map(skus.map(s => [s.name, s]));
                     results.forEach(s => newSkusMap.set(s.name, s));
                     const finalSkus = Array.from(newSkusMap.values());
-                    
-                    setSkus(finalSkus);
-                    saveToLocal({ skus: finalSkus });
+                    setSkus(finalSkus); saveToLocal({ skus: finalSkus });
                     showToast(`同步节点已重构，载入 ${results.length} 项实体`);
+                    setImportText('');
                 }
+            };
+
+            const handleExportBackupKey = () => {
+                const data = { skus, cart, savedLists };
+                const jsonStr = JSON.stringify(data);
+                const encoded = btoa(encodeURIComponent(jsonStr));
+                
+                const textArea = document.createElement("textarea");
+                textArea.value = encoded;
+                textArea.style.position = "fixed";
+                textArea.style.top = "0";
+                textArea.style.left = "0";
+                textArea.style.opacity = "0";
+                document.body.appendChild(textArea);
+                textArea.focus();
+                textArea.select();
+                try {
+                    document.execCommand('copy');
+                    showToast('🔥 密钥复制成功！已存入您的剪贴板，请妥善保存。');
+                } catch (err) {
+                    showToast('复制失败，请手动选择复制', 'warning');
+                }
+                document.body.removeChild(textArea);
             };
 
             const handleExportCSV = () => {
@@ -562,45 +644,30 @@
                     {/* Win11 极光背景 */}
                     <div className="win-bg-bloom"></div>
 
-                    {/* 全局右键菜单 (根据不同视图智能切换功能) */}
+                    {/* 全局右键菜单 */}
                     {contextMenu.visible && (
                         <div 
                             className="fixed z-[1000] w-48 bg-white/95 dark:bg-[#2d2d2d]/95 backdrop-blur-xl border border-black/10 dark:border-white/10 shadow-2xl rounded-lg py-1.5 flex flex-col"
-                            style={{ 
-                                top: Math.min(contextMenu.y, window.innerHeight - 100), 
-                                left: Math.min(contextMenu.x, window.innerWidth - 200) 
-                            }}
+                            style={{ top: Math.min(contextMenu.y, window.innerHeight - 100), left: Math.min(contextMenu.x, window.innerWidth - 200) }}
                             onMouseDown={(e)=>e.stopPropagation()}
                         >
                             {contextMenu.view === 'workspace' ? (
                                 <>
-                                    <button 
-                                        className="px-4 py-2.5 text-left text-[13px] hover:bg-black/5 dark:hover:bg-white/5 transition-colors flex items-center gap-2 text-gray-700 dark:text-gray-200"
-                                        onClick={() => { handleHideListInWorkspace(contextMenu.listId); setContextMenu({...contextMenu, visible: false}); }}
-                                    >
-                                        <i className="ph-bold ph-eye-slash text-gray-500"></i> 删除本条记录
+                                    <button className="px-4 py-2.5 text-left text-[13px] hover:bg-black/5 dark:hover:bg-white/5 transition-colors flex items-center gap-2 text-gray-700 dark:text-gray-200" onClick={() => { handleHideListInWorkspace(contextMenu.listId); setContextMenu({...contextMenu, visible: false}); }}>
+                                        <i className="ph-bold ph-eye-slash text-gray-500"></i> 从工作台隐藏记录
                                     </button>
                                     <div className="h-px bg-black/5 dark:bg-white/5 my-1 w-full"></div>
-                                    <button 
-                                        className="px-4 py-2.5 text-left text-[13px] hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors flex items-center gap-2 text-red-600 font-bold"
-                                        onClick={() => { handleHideAllInWorkspace(); setContextMenu({...contextMenu, visible: false}); }}
-                                    >
-                                        <i className="ph-bold ph-trash"></i> 删除本页所有记录
+                                    <button className="px-4 py-2.5 text-left text-[13px] hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors flex items-center gap-2 text-red-600 font-bold" onClick={() => { handleHideAllInWorkspace(); setContextMenu({...contextMenu, visible: false}); }}>
+                                        <i className="ph-bold ph-broom"></i> 清空工作台所有展示
                                     </button>
                                 </>
                             ) : (
                                 <>
-                                    <button 
-                                        className="px-4 py-2.5 text-left text-[13px] hover:bg-black/5 dark:hover:bg-white/5 transition-colors flex items-center gap-2 text-gray-700 dark:text-gray-200"
-                                        onClick={() => { handleDeleteList(contextMenu.listId); setContextMenu({...contextMenu, visible: false}); }}
-                                    >
+                                    <button className="px-4 py-2.5 text-left text-[13px] hover:bg-black/5 dark:hover:bg-white/5 transition-colors flex items-center gap-2 text-gray-700 dark:text-gray-200" onClick={() => { handleDeleteList(contextMenu.listId); setContextMenu({...contextMenu, visible: false}); }}>
                                         <i className="ph-bold ph-trash text-red-500"></i> 精确销毁本记录
                                     </button>
                                     <div className="h-px bg-black/5 dark:bg-white/5 my-1 w-full"></div>
-                                    <button 
-                                        className="px-4 py-2.5 text-left text-[13px] hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors flex items-center gap-2 text-red-600 font-bold"
-                                        onClick={() => { handleClearAllLists(); setContextMenu({...contextMenu, visible: false}); }}
-                                    >
+                                    <button className="px-4 py-2.5 text-left text-[13px] hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors flex items-center gap-2 text-red-600 font-bold" onClick={() => { handleClearAllLists(); setContextMenu({...contextMenu, visible: false}); }}>
                                         <i className="ph-bold ph-warning-octagon"></i> 格式化全部流水
                                     </button>
                                 </>
@@ -608,12 +675,9 @@
                         </div>
                     )}
 
-                    {/* 全局悬浮备注提示 (实时跟随鼠标) */}
+                    {/* 全局悬浮备注提示 */}
                     {remarkTooltip.visible && remarkTooltip.text && (
-                        <div 
-                            className="fixed z-[1000] bg-gray-900/95 dark:bg-white/95 backdrop-blur-sm text-white dark:text-gray-900 px-3 py-2 rounded-md shadow-xl text-[12px] max-w-xs break-words pointer-events-none"
-                            style={{ top: remarkTooltip.y + 15, left: remarkTooltip.x + 15 }}
-                        >
+                        <div className="fixed z-[1000] bg-gray-900/95 dark:bg-white/95 backdrop-blur-sm text-white dark:text-gray-900 px-3 py-2 rounded-md shadow-xl text-[12px] max-w-xs break-words pointer-events-none" style={{ top: remarkTooltip.y + 15, left: remarkTooltip.x + 15 }}>
                             {remarkTooltip.text}
                         </div>
                     )}
@@ -624,7 +688,7 @@
                             <div className="w-7 h-7 bg-win-accent dark:bg-win-accentDark rounded-md flex items-center justify-center text-white dark:text-gray-900 shadow-md shrink-0">
                                 <i className="ph-bold ph-aperture text-lg"></i>
                             </div>
-                            <div className="font-bold text-[14px] tracking-widest text-gray-900 dark:text-white truncate">润晟软件 V2.3</div>
+                            <div className="font-bold text-[14px] tracking-widest text-gray-900 dark:text-white truncate">润晟软件 V3.0</div>
                         </div>
 
                         <nav className="flex-1 px-3 space-y-1 mt-2">
@@ -641,6 +705,12 @@
                                 <span className="flex-1 text-left">欠货追踪大盘</span>
                                 {owedItems.length > 0 && <span className="text-[10px] bg-orange-500 text-white px-1.5 rounded">{owedItems.length}</span>}
                             </button>
+                            {/* V3.0 新增数据魔方 */}
+                            <button onClick={() => setActiveView('analytics')} className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] transition-colors ${activeView === 'analytics' ? 'bg-black/5 dark:bg-white/10 font-bold text-gray-900 dark:text-white' : 'text-gray-600 dark:text-gray-400 hover:bg-black/5 dark:hover:bg-white/5'}`}>
+                                <i className={`ph-bold ph-chart-pie-slice text-[16px] ${activeView === 'analytics' ? 'text-emerald-500' : ''}`}></i>
+                                数据魔方分析
+                            </button>
+                            <div className="my-2 h-px bg-black/5 dark:bg-white/5 mx-2"></div>
                             <button onClick={() => setActiveView('database')} className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] transition-colors ${activeView === 'database' ? 'bg-black/5 dark:bg-white/10 font-bold text-gray-900 dark:text-white' : 'text-gray-600 dark:text-gray-400 hover:bg-black/5 dark:hover:bg-white/5'}`}>
                                 <i className={`ph-bold ph-database text-[16px] ${activeView === 'database' ? 'text-win-accent dark:text-win-accentDark' : ''}`}></i>
                                 资产数据库
@@ -660,7 +730,7 @@
                         
                         {/* 全局 Toast 通知 */}
                         {statusMsg.text && (
-                            <div className="absolute top-6 left-1/2 -translate-x-1/2 z-50 animate-in slide-in-from-top-4 fade-in">
+                            <div className="absolute top-6 left-1/2 -translate-x-1/2 z-[9999] animate-in slide-in-from-top-4 fade-in">
                                 <div className={`border shadow-lg px-4 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${statusMsg.type === 'warning' ? 'bg-orange-50 dark:bg-[#3d2a10] border-orange-200 dark:border-orange-900/50 text-orange-600 dark:text-orange-400' : 'bg-white dark:bg-[#333] border-black/10 dark:border-white/10 text-gray-800 dark:text-gray-100'}`}>
                                     <i className={`ph-fill ${statusMsg.type === 'warning' ? 'ph-warning-circle' : 'ph-check-circle'} ${statusMsg.type === 'warning' ? 'text-orange-500' : 'text-green-500'}`}></i> {statusMsg.text}
                                 </div>
@@ -675,7 +745,7 @@
                             {activeView === 'workspace' && (
                                 <div className="flex gap-6 w-full h-full animate-in fade-in min-h-0">
                                     
-                                    {/* --- 第 1 列：检索与购物车 (占比 50%) --- */}
+                                    {/* --- 第 1 列：检索与购物车 --- */}
                                     <div className="flex-[2] flex flex-col gap-6 h-full min-h-0">
                                         <div className="flex justify-between items-end shrink-0 h-[50px] pb-1">
                                             <div>
@@ -698,13 +768,9 @@
                                                     {[50, 100, 500, 1000].map(num => (
                                                         <button key={num} onClick={() => {
                                                             let target = null;
-                                                            if (selectedCartIndex >= 0 && cart[selectedCartIndex]) {
-                                                                target = cart[selectedCartIndex].sku;
-                                                            } else if (querySuggestions.length > 0) {
-                                                                target = querySuggestions[highlightedSuggestionIndex >= 0 ? highlightedSuggestionIndex : 0];
-                                                            } else if (skus.length > 0) {
-                                                                target = skus[0];
-                                                            }
+                                                            if (selectedCartIndex >= 0 && cart[selectedCartIndex]) target = cart[selectedCartIndex].sku;
+                                                            else if (querySuggestions.length > 0) target = querySuggestions[highlightedSuggestionIndex >= 0 ? highlightedSuggestionIndex : 0];
+                                                            else if (skus.length > 0) target = skus[0];
                                                             if (target) handleQuickAddPurchase(target, num);
                                                         }} className="px-3 py-1 text-[11px] font-bold bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 rounded transition-colors active:scale-95">
                                                             +{num}
@@ -715,44 +781,32 @@
                                             <div className="relative group w-full">
                                                 <input 
                                                     type="text" 
-                                                    placeholder="输入名称进行快速检索引擎... (上下箭头选择，回车加购)" 
+                                                    placeholder="输入名称进行快速检索引擎... (上下箭头选择，回车加购100件)" 
                                                     className={`${winInput} pl-10 h-[40px] pr-24 text-[13px]`} 
                                                     value={queryTerm} 
                                                     onChange={e => {setQueryTerm(e.target.value); setShowQueryDropdown(true);}} 
                                                     onFocus={e => {setShowQueryDropdown(true); e.target.select();}} 
                                                     onBlur={() => setTimeout(() => setShowQueryDropdown(false), 200)}
                                                     onKeyDown={e => { 
-                                                        if (e.key === 'ArrowDown') {
-                                                            e.preventDefault();
-                                                            setHighlightedSuggestionIndex(prev => Math.min(prev + 1, querySuggestions.length - 1));
-                                                        } else if (e.key === 'ArrowUp') {
-                                                            e.preventDefault();
-                                                            setHighlightedSuggestionIndex(prev => Math.max(prev - 1, 0));
-                                                        } else if (e.key === 'Enter') {
+                                                        if (e.key === 'ArrowDown') { e.preventDefault(); setHighlightedSuggestionIndex(prev => Math.min(prev + 1, querySuggestions.length - 1)); } 
+                                                        else if (e.key === 'ArrowUp') { e.preventDefault(); setHighlightedSuggestionIndex(prev => Math.max(prev - 1, 0)); } 
+                                                        else if (e.key === 'Enter') {
                                                             e.preventDefault();
                                                             if (querySuggestions.length > 0) { 
                                                                 const targetIdx = highlightedSuggestionIndex >= 0 ? highlightedSuggestionIndex : 0;
                                                                 handleQuickAddPurchase(querySuggestions[targetIdx], 100); 
-                                                                setQueryTerm(''); 
-                                                                setShowQueryDropdown(false); 
-                                                                setHighlightedSuggestionIndex(-1);
-                                                                e.target.blur(); 
+                                                                setQueryTerm(''); setShowQueryDropdown(false); setHighlightedSuggestionIndex(-1); e.target.blur(); 
                                                             } 
                                                         } 
                                                     }} 
                                                 />
                                                 <i className="ph-bold ph-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"></i>
                                                 
-                                                {/* Win11 下拉菜单 */}
                                                 {showQueryDropdown && queryTerm && (
                                                     <div className="absolute top-full mt-2 left-0 right-0 bg-white/95 dark:bg-[#2d2d2d]/95 backdrop-blur-xl border border-black/10 dark:border-white/10 shadow-xl rounded-lg max-h-64 overflow-y-auto z-50 p-1 custom-scrollbar">
                                                         {querySuggestions.length > 0 ? querySuggestions.map((s, idx) => (
-                                                            <div 
-                                                                key={s.name} 
-                                                                id={`suggestion-${idx}`}
-                                                                className={`px-3 py-2.5 rounded-md flex justify-between items-center cursor-pointer transition-colors ${idx === highlightedSuggestionIndex ? 'bg-win-accent/20 dark:bg-win-accentDark/20 font-bold border-l-2 border-win-accent dark:border-win-accentDark' : 'hover:bg-black/5 dark:hover:bg-white/5 border-l-2 border-transparent'}`} 
-                                                                onClick={() => { handleQuickAddPurchase(s, 100); setQueryTerm(''); setShowQueryDropdown(false); setHighlightedSuggestionIndex(-1); }}
-                                                            >
+                                                            <div key={s.name} id={`suggestion-${idx}`} className={`px-3 py-2.5 rounded-md flex justify-between items-center cursor-pointer transition-colors ${idx === highlightedSuggestionIndex ? 'bg-win-accent/20 dark:bg-win-accentDark/20 font-bold border-l-2 border-win-accent dark:border-win-accentDark' : 'hover:bg-black/5 dark:hover:bg-white/5 border-l-2 border-transparent'}`} 
+                                                                onClick={() => { handleQuickAddPurchase(s, 100); setQueryTerm(''); setShowQueryDropdown(false); setHighlightedSuggestionIndex(-1); }}>
                                                                 <span className="text-[13px]">{s.name} <span className="text-[10px] text-gray-400 ml-1.5 px-1.5 py-0.5 bg-black/5 dark:bg-white/10 rounded">{s.category || '未分类'}</span></span>
                                                                 <span className="text-[12px] font-bold text-win-accent dark:text-win-accentDark">￥{s.cost.toFixed(2)}</span>
                                                             </div>
@@ -803,13 +857,8 @@
                                                                     </div>
                                                                     <div className="w-px h-8 bg-gray-200 dark:bg-gray-700 mx-1"></div>
                                                                     <div className="flex items-center gap-1">
-                                                                        <input 
-                                                                            type="number" 
-                                                                            value={item.qty === 0 ? '' : item.qty} 
-                                                                            onClick={e => e.stopPropagation()} 
-                                                                            onFocus={e => e.target.select()}
-                                                                            onChange={(e) => updateCartQty(idx, e.target.value === '' ? 0 : parseInt(e.target.value))} 
-                                                                            onKeyDown={e => { if (e.key === 'Enter') e.target.blur(); }}
+                                                                        <input type="number" value={item.qty === 0 ? '' : item.qty} onClick={e => e.stopPropagation()} onFocus={e => e.target.select()}
+                                                                            onChange={(e) => updateCartQty(idx, e.target.value === '' ? 0 : parseInt(e.target.value))} onKeyDown={e => { if (e.key === 'Enter') e.target.blur(); }}
                                                                             className={`${winInput} w-20 text-center py-1 font-bold h-[30px] text-[13px]`} 
                                                                         />
                                                                         <button onClick={(e)=>removeFromCart(idx, e)} className="w-7 h-7 flex items-center justify-center text-red-400 opacity-0 group-hover:opacity-100 hover:bg-red-50 dark:hover:bg-red-900/30 rounded transition-all"><i className="ph-bold ph-x text-sm"></i></button>
@@ -823,7 +872,7 @@
                                         </div>
                                     </div>
 
-                                    {/* --- 第 2 列：资金统计 & 侧边清单缩略图 (占比 25%) --- */}
+                                    {/* --- 第 2 列：资金统计 & 侧边清单缩略图 --- */}
                                     <div className="flex-1 flex flex-col gap-6 h-full min-h-0">
                                         <div className="flex justify-end items-end shrink-0 h-[50px] pb-1">
                                             <div className="flex flex-col items-end select-none cursor-default gold-engraved">
@@ -842,10 +891,9 @@
                                             </div>
                                         </div>
 
-                                        {/* 侧边已存清单缩略（支持右键）只显示未被隐藏的 */}
                                         <div className={`${winCard} flex-1 overflow-hidden flex flex-col min-h-0 w-full`}>
                                             <div className="px-5 py-3.5 border-b border-black/5 dark:border-white/5 text-[12px] font-bold text-gray-500 flex items-center justify-between shrink-0 w-full">
-                                                <div className="flex items-center gap-2"><i className="ph-fill ph-archive shrink-0"></i> <span className="truncate">近期记录 (右键可删)</span></div>
+                                                <div className="flex items-center gap-2"><i className="ph-fill ph-archive shrink-0"></i> <span className="truncate">近期记录 (右键管理)</span></div>
                                                 <span className="text-[10px] bg-black/5 dark:bg-white/10 px-2 py-0.5 rounded">{savedLists.filter(l => !l.hiddenFromWorkspace).length} 笔</span>
                                             </div>
                                             <div className="flex-1 overflow-y-auto p-3 space-y-2 custom-scrollbar w-full">
@@ -853,17 +901,12 @@
                                                     <div className="text-center text-[12px] opacity-40 py-8 font-medium">工作台面板暂无近期记录</div>
                                                 ) : (
                                                     savedLists.filter(l => !l.hiddenFromWorkspace).map((list) => (
-                                                        <div 
-                                                            key={list.id} 
-                                                            className="p-3 rounded-lg border border-black/5 dark:border-white/5 bg-white/40 dark:bg-black/20 hover:bg-white/80 dark:hover:bg-white/5 transition-colors cursor-pointer group"
+                                                        <div key={list.id} className="p-3 rounded-lg border border-black/5 dark:border-white/5 bg-white/40 dark:bg-black/20 hover:bg-white/80 dark:hover:bg-white/5 transition-colors cursor-pointer group"
                                                             onClick={() => handleLoadList(list)}
                                                             onContextMenu={(e) => { e.preventDefault(); setContextMenu({ visible: true, x: e.clientX, y: e.clientY, listId: list.id, view: 'workspace' }); }}
-                                                            title="点击加载，右键菜单"
-                                                        >
+                                                            title="点击加载，右键菜单">
                                                             <div className="flex justify-between items-start mb-2">
-                                                                <span className="text-[13px] font-bold text-gray-800 dark:text-gray-200 truncate pr-2 flex-1 group-hover:text-win-accent dark:group-hover:text-win-accentDark transition-colors">
-                                                                    {list.name}
-                                                                </span>
+                                                                <span className="text-[13px] font-bold text-gray-800 dark:text-gray-200 truncate pr-2 flex-1 group-hover:text-win-accent dark:group-hover:text-win-accentDark transition-colors">{list.name}</span>
                                                             </div>
                                                             <div className="flex justify-between items-center w-full">
                                                                 <div className="text-[10px] text-gray-400">{list.timestamp.split(' ')[0]}</div>
@@ -876,7 +919,7 @@
                                         </div>
                                     </div>
 
-                                    {/* --- 第 3 列：流向榜单 (占比 25%) --- */}
+                                    {/* --- 第 3 列：流向榜单 --- */}
                                     <div className="flex-1 flex flex-col gap-6 h-full min-h-0 w-full overflow-hidden">
                                         <div className="flex justify-start items-end shrink-0 h-[50px] pb-1 w-full overflow-hidden">
                                             <div>
@@ -885,7 +928,6 @@
                                             </div>
                                         </div>
 
-                                        {/* 资金占比排行 */}
                                         <div className={`${winCard} flex-1 overflow-hidden flex flex-col min-h-0 w-full`}>
                                             <div className="px-5 py-3.5 border-b border-black/5 dark:border-white/5 text-[12px] font-bold text-gray-500 flex items-center gap-2 shrink-0 w-full">
                                                 <i className="ph-fill ph-chart-bar shrink-0"></i> <span className="truncate">资金流向分布</span>
@@ -915,7 +957,7 @@
                             )}
 
                             {/* =========================================
-                                视图 2：历史清单流水 (横向全景展示，支持欠货标记)
+                                视图 2：历史清单流水 (横向全景展示)
                                 ========================================= */}
                             {activeView === 'history' && (
                                 <div className="flex flex-col w-full h-full animate-in fade-in min-h-0">
@@ -926,11 +968,6 @@
                                         </div>
                                         <div className="flex items-center gap-3">
                                             <span className="text-[11px] font-bold px-2 py-1 bg-black/5 dark:bg-white/10 rounded text-gray-600 dark:text-gray-300">共计 {savedLists.length} 个历史节点</span>
-                                            {savedLists.length > 0 && (
-                                                <button onClick={handleClearAllLists} className={`${winButtonSec} !text-red-500 hover:!bg-red-50 dark:hover:!bg-red-900/20 !py-1.5`}>
-                                                    <i className="ph-bold ph-warning-octagon"></i> 清空普通存档
-                                                </button>
-                                            )}
                                         </div>
                                     </div>
 
@@ -961,15 +998,9 @@
                                                             </div>
                                                         </div>
                                                         
-                                                        {/* 清单内容，支持点击标记欠货 */}
                                                         <div className="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-1" onContextMenu={(e) => { e.preventDefault(); setContextMenu({ visible: true, x: e.clientX, y: e.clientY, listId: list.id, view: 'history' }); }}>
                                                             {list.items.map((item, idx) => (
-                                                                <div 
-                                                                    key={idx} 
-                                                                    className={`flex justify-between items-center text-[12px] p-2 rounded-md transition-colors cursor-pointer border ${item.isOwed ? 'bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-800/50' : 'border-transparent hover:bg-black/5 dark:hover:bg-white/5'}`}
-                                                                    onClick={() => toggleOwedStatus(list.id, idx)}
-                                                                    title="点击切换：欠货 / 已满足"
-                                                                >
+                                                                <div key={idx} className={`flex justify-between items-center text-[12px] p-2 rounded-md transition-colors cursor-pointer border ${item.isOwed ? 'bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-800/50' : 'border-transparent hover:bg-black/5 dark:hover:bg-white/5'}`} onClick={() => toggleOwedStatus(list.id, idx)} title="点击切换：欠货 / 已满足">
                                                                     <div className="truncate pr-3 font-medium flex-1 flex items-center gap-1.5">
                                                                         {item.isOwed && <span className="bg-orange-500 text-white text-[9px] px-1 rounded shadow-sm">欠货</span>}
                                                                         <span className={item.isOwed ? 'text-orange-700 dark:text-orange-400' : 'text-gray-700 dark:text-gray-300'}>{item.sku.name}</span>
@@ -996,12 +1027,10 @@
                             )}
 
                             {/* =========================================
-                                视图 3：欠货追踪大盘 (V2.1 宽版重构) 
+                                视图 3：欠货追踪大盘 
                                 ========================================= */}
                             {activeView === 'owed' && (
                                 <div className="flex flex-col gap-6 w-full h-full animate-in fade-in min-h-0">
-                                    
-                                    {/* 顶部：标题与全宽数据面板 */}
                                     <div className="flex flex-col gap-4 shrink-0">
                                         <div className="flex justify-between items-end h-[50px] pb-1">
                                             <div>
@@ -1013,16 +1042,13 @@
                                             </div>
                                         </div>
 
-                                        {/* 三卡片横向平铺展示统计数据 */}
                                         <div className="flex gap-6 w-full">
                                             <div className={`${winCard} p-6 flex-1 flex items-center justify-between bg-gradient-to-r from-orange-50 to-white dark:from-[#3d2a10] dark:to-[#222] border-l-4 border-l-orange-500`}>
                                                 <div className="flex flex-col">
                                                     <span className="text-[11px] font-bold text-orange-600 dark:text-orange-400 uppercase tracking-widest mb-1.5">牵涉滞留资金总额</span>
                                                     <span className={`font-black text-orange-600 dark:text-orange-400 tracking-tighter ${getDynamicTextSize(owedStats.cost, 'text-4xl', 'text-3xl', 'text-2xl')}`}>￥<AnimatedNumber value={owedStats.cost} /></span>
                                                 </div>
-                                                <div className="w-14 h-14 rounded-full bg-orange-500/10 flex items-center justify-center text-orange-500">
-                                                    <i className="ph-fill ph-coin text-3xl"></i>
-                                                </div>
+                                                <div className="w-14 h-14 rounded-full bg-orange-500/10 flex items-center justify-center text-orange-500"><i className="ph-fill ph-coin text-3xl"></i></div>
                                             </div>
                                             
                                             <div className={`${winCard} p-6 flex-1 flex items-center justify-between border-l-4 border-l-amber-500`}>
@@ -1030,9 +1056,7 @@
                                                     <span className="text-[11px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-widest mb-1.5">累计欠货总件数</span>
                                                     <span className={`font-black text-amber-600 dark:text-amber-400 tracking-tighter ${getDynamicTextSize(owedStats.qty, 'text-4xl', 'text-3xl', 'text-2xl')}`}><AnimatedNumber value={owedStats.qty} format={v=>Math.floor(v)}/> <span className="text-lg">件</span></span>
                                                 </div>
-                                                <div className="w-14 h-14 rounded-full bg-amber-500/10 flex items-center justify-center text-amber-500">
-                                                    <i className="ph-fill ph-package text-3xl"></i>
-                                                </div>
+                                                <div className="w-14 h-14 rounded-full bg-amber-500/10 flex items-center justify-center text-amber-500"><i className="ph-fill ph-package text-3xl"></i></div>
                                             </div>
                                             
                                             <div className={`${winCard} p-6 flex-1 flex items-center justify-between border-l-4 border-l-rose-500`}>
@@ -1040,14 +1064,11 @@
                                                     <span className="text-[11px] font-bold text-rose-600 dark:text-rose-400 uppercase tracking-widest mb-1.5">受影响记录批次</span>
                                                     <span className="text-4xl font-black text-rose-600 dark:text-rose-400 tracking-tighter">{owedItems.length} <span className="text-lg">项</span></span>
                                                 </div>
-                                                <div className="w-14 h-14 rounded-full bg-rose-500/10 flex items-center justify-center text-rose-500">
-                                                    <i className="ph-fill ph-warning-circle text-3xl"></i>
-                                                </div>
+                                                <div className="w-14 h-14 rounded-full bg-rose-500/10 flex items-center justify-center text-rose-500"><i className="ph-fill ph-warning-circle text-3xl"></i></div>
                                             </div>
                                         </div>
                                     </div>
 
-                                    {/* 下方：全宽的数据明细列表 */}
                                     <div className={`${winCard} flex-1 flex flex-col overflow-hidden min-h-0 border border-orange-200 dark:border-orange-900/50`}>
                                         <div className="flex-1 overflow-y-auto custom-scrollbar relative">
                                             <table className="w-full text-left border-collapse">
@@ -1074,58 +1095,28 @@
                                                                 <div className="text-[10px] text-gray-500">单价: ￥{item.sku.cost.toFixed(2)}</div>
                                                             </td>
                                                             <td className="px-6 py-3.5 text-center">
-                                                                <input 
-                                                                    key={`qty-${item.listId}-${item.itemIndex}-${item.currentOwedQty}`}
-                                                                    defaultValue={item.currentOwedQty}
+                                                                <input key={`qty-${item.listId}-${item.itemIndex}-${item.currentOwedQty}`} defaultValue={item.currentOwedQty}
                                                                     onBlur={(e) => {
                                                                         const newVal = parseInt(e.target.value) || 0;
-                                                                        if (newVal !== item.currentOwedQty) {
-                                                                            handleUpdateOwedItem(item.listId, item.itemIndex, { 
-                                                                                owedQty: Math.max(0, newVal), 
-                                                                                owedModifyCount: item.modifyCount + 1 
-                                                                            });
-                                                                        }
-                                                                    }}
-                                                                    onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); }}
-                                                                    type="number"
+                                                                        if (newVal !== item.currentOwedQty) handleUpdateOwedItem(item.listId, item.itemIndex, { owedQty: Math.max(0, newVal), owedModifyCount: item.modifyCount + 1 });
+                                                                    }} onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); }} type="number"
                                                                     className={`${winInput} w-28 text-center py-1 h-[28px] font-black text-orange-600 dark:text-orange-400 bg-white/60 dark:bg-black/40 shadow-[inset_0_2px_4px_rgba(0,0,0,0.05)]`} 
                                                                 />
                                                             </td>
-                                                            <td className="px-2 py-3.5 text-center text-[11px] font-bold text-gray-400">
-                                                                {item.modifyCount > 0 ? `${item.modifyCount} 次` : '-'}
-                                                            </td>
-                                                            <td className="px-6 py-3.5 text-right font-bold text-gray-900 dark:text-gray-100">
-                                                                ￥{(item.sku.cost * item.currentOwedQty).toFixed(2)}
-                                                            </td>
-                                                            <td 
-                                                                className="px-6 py-3.5"
-                                                                onMouseEnter={(e) => {
-                                                                    if (item.remark) setRemarkTooltip({ visible: true, x: e.clientX, y: e.clientY, text: item.remark });
-                                                                }}
-                                                                onMouseMove={(e) => {
-                                                                    if (item.remark && remarkTooltip.visible) setRemarkTooltip(prev => ({ ...prev, x: e.clientX, y: e.clientY }));
-                                                                }}
-                                                                onMouseLeave={() => setRemarkTooltip({ visible: false, x: 0, y: 0, text: '' })}
-                                                            >
-                                                                <input 
-                                                                    key={`rem-${item.listId}-${item.itemIndex}-${item.remark}`}
-                                                                    defaultValue={item.remark}
-                                                                    placeholder="点击添加备注..."
-                                                                    onBlur={(e) => {
-                                                                        const newRemark = e.target.value.trim();
-                                                                        if (newRemark !== item.remark) {
-                                                                            handleUpdateOwedItem(item.listId, item.itemIndex, { owedRemark: newRemark });
-                                                                        }
-                                                                    }}
+                                                            <td className="px-2 py-3.5 text-center text-[11px] font-bold text-gray-400">{item.modifyCount > 0 ? `${item.modifyCount} 次` : '-'}</td>
+                                                            <td className="px-6 py-3.5 text-right font-bold text-gray-900 dark:text-gray-100">￥{(item.sku.cost * item.currentOwedQty).toFixed(2)}</td>
+                                                            <td className="px-6 py-3.5"
+                                                                onMouseEnter={(e) => { if (item.remark) setRemarkTooltip({ visible: true, x: e.clientX, y: e.clientY, text: item.remark }); }}
+                                                                onMouseMove={(e) => { if (item.remark && remarkTooltip.visible) setRemarkTooltip(prev => ({ ...prev, x: e.clientX, y: e.clientY })); }}
+                                                                onMouseLeave={() => setRemarkTooltip({ visible: false, x: 0, y: 0, text: '' })}>
+                                                                <input key={`rem-${item.listId}-${item.itemIndex}-${item.remark}`} defaultValue={item.remark} placeholder="点击添加备注..."
+                                                                    onBlur={(e) => { const newRemark = e.target.value.trim(); if (newRemark !== item.remark) handleUpdateOwedItem(item.listId, item.itemIndex, { owedRemark: newRemark }); }}
                                                                     onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); }}
                                                                     className={`${winInput} w-full text-left py-1 h-[28px] text-[12px] bg-transparent border-transparent hover:border-black/10 dark:hover:border-white/10 focus:bg-white dark:focus:bg-[#1f1f1f] focus:border-win-accent transition-all`} 
                                                                 />
                                                             </td>
                                                             <td className="px-6 py-3.5 text-center">
-                                                                <button 
-                                                                    onClick={() => toggleOwedStatus(item.listId, item.itemIndex)}
-                                                                    className="text-[11px] font-bold bg-green-500 text-white px-3 py-1.5 rounded hover:bg-green-600 transition-colors shadow-sm active:scale-95 whitespace-nowrap"
-                                                                >
+                                                                <button onClick={() => toggleOwedStatus(item.listId, item.itemIndex)} className="text-[11px] font-bold bg-green-500 text-white px-3 py-1.5 rounded hover:bg-green-600 transition-colors shadow-sm active:scale-95 whitespace-nowrap">
                                                                     <i className="ph-bold ph-check mr-1"></i> 解除欠款
                                                                 </button>
                                                             </td>
@@ -1145,12 +1136,74 @@
                             )}
 
                             {/* =========================================
-                                视图 4：资产数据库 
+                                视图 4：数据魔方分析 (V3.0 全景业务洞察)
+                                ========================================= */}
+                            {activeView === 'analytics' && (
+                                <div className="flex gap-6 w-full h-full animate-in fade-in min-h-0">
+                                    <div className="flex-[2] flex flex-col gap-6 h-full min-h-0">
+                                        <div className="flex justify-between items-end shrink-0 h-[50px] pb-1">
+                                            <div>
+                                                <h1 className="text-2xl font-bold leading-none">数据魔方分析</h1>
+                                                <p className="text-[10px] text-gray-500 dark:text-gray-400 mt-1.5 uppercase tracking-wider">Business Analytics</p>
+                                            </div>
+                                        </div>
+
+                                        <div className={`${winCard} flex-1 flex flex-col items-center justify-center p-8 overflow-hidden relative`}>
+                                            <div className="text-[13px] font-bold text-gray-500 absolute top-6 left-6">资产分布概览图 (基于历史流水)</div>
+                                            <div className="w-[300px] h-[300px] relative drop-shadow-2xl">
+                                                <SvgPieChart data={analyticsData.pieData} />
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex-1 flex flex-col gap-6 h-full min-h-0">
+                                        <div className="h-[50px] shrink-0"></div>
+
+                                        <div className={`${winCard} p-6 flex flex-col items-center justify-center text-center bg-gradient-to-br from-emerald-50 to-white dark:from-[#0d3b2b] dark:to-[#222] shadow-md border-t-4 border-t-emerald-500 shrink-0 w-full overflow-hidden`}>
+                                            <div className="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest mb-2 shrink-0">历史总交易资产沉淀</div>
+                                            <div className={`font-black text-emerald-600 dark:text-emerald-400 tracking-tighter mb-4 w-full truncate transition-all duration-300 ${getDynamicTextSize(analyticsData.totalCost)}`}>
+                                                ￥<AnimatedNumber value={analyticsData.totalCost} />
+                                            </div>
+                                            <div className="inline-block bg-emerald-500/10 px-4 py-1.5 rounded-full text-[11px] font-bold text-emerald-600 dark:text-emerald-400 shrink-0 truncate max-w-full">
+                                                共流转资产 {analyticsData.totalQty} 件
+                                            </div>
+                                        </div>
+
+                                        <div className={`${winCard} flex-1 overflow-hidden flex flex-col min-h-0 w-full`}>
+                                            <div className="px-5 py-3.5 border-b border-black/5 dark:border-white/5 text-[12px] font-bold text-gray-500 flex items-center justify-between shrink-0 w-full">
+                                                <div className="flex items-center gap-2"><i className="ph-fill ph-tag shrink-0"></i> <span>分类资金大头占比</span></div>
+                                            </div>
+                                            <div className="flex-1 overflow-y-auto p-5 space-y-4 custom-scrollbar w-full">
+                                                {analyticsData.pieData.length === 0 ? <div className="text-center text-[12px] opacity-40 py-4 font-medium">无数据</div> : 
+                                                analyticsData.pieData.map((cat, idx) => {
+                                                    const percentage = (cat.value / analyticsData.totalCost) * 100;
+                                                    return (
+                                                        <div key={idx} className="space-y-1.5 w-full">
+                                                            <div className="flex justify-between text-[12px] font-bold gap-2 w-full">
+                                                                <span className="flex items-center gap-2 truncate flex-1 text-gray-800 dark:text-gray-200">
+                                                                    <span className="w-2 h-2 rounded-full shrink-0" style={{backgroundColor: cat.color}}></span>
+                                                                    <span className="truncate">{cat.label}</span>
+                                                                </span>
+                                                                <span className="shrink-0 max-w-[45%] text-right font-black" style={{color: cat.color}}>￥{cat.value.toFixed(2)} ({percentage.toFixed(1)}%)</span>
+                                                            </div>
+                                                            <div className="w-full h-1.5 bg-black/5 dark:bg-white/10 rounded-full overflow-hidden">
+                                                                <div className="h-full rounded-full transition-all duration-1000" style={{width: `${percentage}%`, backgroundColor: cat.color}}></div>
+                                                            </div>
+                                                        </div>
+                                                    )
+                                                })}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* =========================================
+                                视图 5：资产数据库 (V3.0 加入进价历史波动雷达)
                                 ========================================= */}
                             {activeView === 'database' && (
                                 <div className="flex gap-6 w-full h-full animate-in fade-in min-h-0">
                                     
-                                    {/* --- 第 1 列：资产长列表 --- 占比放大至 75% 保证表格宽敞 */}
                                     <div className="flex-[3] flex flex-col gap-6 h-full min-h-0">
                                         <div className="flex justify-between items-end shrink-0 h-[50px] pb-1">
                                             <div>
@@ -1175,7 +1228,6 @@
                                                         placeholder="全局滤镜过滤..." 
                                                         value={searchTerm} 
                                                         onChange={e => setSearchTerm(e.target.value)} 
-                                                        onFocus={e => e.target.select()}
                                                     />
                                                 </div>
                                             </div>
@@ -1184,10 +1236,9 @@
                                                 <table className="w-full text-left border-collapse">
                                                     <thead className="sticky top-0 bg-white/95 dark:bg-[#2d2d2d]/95 backdrop-blur z-10 text-[11px] text-gray-500 uppercase border-b border-black/5 dark:border-white/5 shadow-sm">
                                                         <tr>
-                                                            {/* 添加 whitespace-nowrap 彻底防止换行 */}
-                                                            <th className="font-bold px-6 py-3 w-[45%] whitespace-nowrap">实体名称</th>
+                                                            <th className="font-bold px-6 py-3 w-[40%] whitespace-nowrap">实体名称</th>
                                                             <th className="font-bold px-6 py-3 w-[20%] text-center whitespace-nowrap">分类</th>
-                                                            <th className="font-bold px-6 py-3 w-[20%] text-right whitespace-nowrap">基准进价</th>
+                                                            <th className="font-bold px-6 py-3 w-[25%] text-right whitespace-nowrap">基准进价 / 历史波动</th>
                                                             <th className="font-bold px-6 py-3 w-[15%] text-center whitespace-nowrap">操作</th>
                                                         </tr>
                                                     </thead>
@@ -1198,72 +1249,57 @@
                                                                 <td className="px-6 py-3.5 text-center whitespace-nowrap relative">
                                                                     {editingCategorySkuName === sku.name ? (
                                                                         <div className="relative inline-block text-left w-28">
-                                                                            <button 
-                                                                                autoFocus 
-                                                                                onFocus={() => {
-                                                                                    const initialIdx = allCategories.indexOf(sku.category || '未分类');
-                                                                                    setHighlightedCatIndex(initialIdx >= 0 ? initialIdx : 0);
-                                                                                }}
-                                                                                onBlur={() => setTimeout(() => setEditingCategorySkuName(null), 150)} 
+                                                                            <button autoFocus onFocus={() => setHighlightedCatIndex(allCategories.indexOf(sku.category || '未分类'))} onBlur={() => setTimeout(() => setEditingCategorySkuName(null), 150)} 
                                                                                 onKeyDown={e => { 
-                                                                                    if (e.key === 'ArrowDown') {
-                                                                                        e.preventDefault();
-                                                                                        setHighlightedCatIndex(prev => Math.min(prev + 1, allCategories.length - 1));
-                                                                                    } else if (e.key === 'ArrowUp') {
-                                                                                        e.preventDefault();
-                                                                                        setHighlightedCatIndex(prev => Math.max(prev - 1, 0));
-                                                                                    } else if (e.key === 'Enter') {
-                                                                                        e.preventDefault();
-                                                                                        if (highlightedCatIndex >= 0 && allCategories[highlightedCatIndex]) {
-                                                                                            handleEditCategory(sku.name, allCategories[highlightedCatIndex]);
-                                                                                        }
-                                                                                    } else if (e.key === 'Escape') {
-                                                                                        setEditingCategorySkuName(null);
-                                                                                    }
+                                                                                    if (e.key === 'ArrowDown') { e.preventDefault(); setHighlightedCatIndex(prev => Math.min(prev + 1, allCategories.length - 1)); } 
+                                                                                    else if (e.key === 'ArrowUp') { e.preventDefault(); setHighlightedCatIndex(prev => Math.max(prev - 1, 0)); } 
+                                                                                    else if (e.key === 'Enter') { e.preventDefault(); if (highlightedCatIndex >= 0) handleEditCategory(sku.name, allCategories[highlightedCatIndex]); } 
+                                                                                    else if (e.key === 'Escape') setEditingCategorySkuName(null);
                                                                                 }}
-                                                                                className={`${winInput} w-full text-center py-1 h-[26px] text-[12px] cursor-pointer outline-none overflow-hidden flex items-center justify-center`} 
-                                                                            >
+                                                                                className={`${winInput} w-full text-center py-1 h-[26px] text-[12px] cursor-pointer outline-none overflow-hidden flex items-center justify-center`} >
                                                                                 {allCategories[highlightedCatIndex >= 0 ? highlightedCatIndex : 0] || '未分类'}
                                                                             </button>
                                                                             <div className="absolute top-full mt-1 left-1/2 -translate-x-1/2 w-32 bg-white/95 dark:bg-[#2d2d2d]/95 backdrop-blur-xl border border-black/10 dark:border-white/10 shadow-xl rounded-md max-h-40 overflow-y-auto z-[100] p-1 custom-scrollbar">
                                                                                 {allCategories.map((cat, cIdx) => (
-                                                                                    <div 
-                                                                                        key={cat} 
-                                                                                        id={`cat-suggestion-${cIdx}`}
-                                                                                        className={`px-3 py-1.5 rounded-sm text-[12px] cursor-pointer transition-colors text-center ${cIdx === highlightedCatIndex ? 'bg-win-accent/20 dark:bg-win-accentDark/20 font-bold text-win-accent dark:text-win-accentDark' : 'hover:bg-black/5 dark:hover:bg-white/5 text-gray-800 dark:text-gray-200'}`}
-                                                                                        onMouseDown={(e) => { e.preventDefault(); handleEditCategory(sku.name, cat); }}
-                                                                                        onMouseEnter={() => setHighlightedCatIndex(cIdx)}
-                                                                                    >
+                                                                                    <div key={cat} id={`cat-suggestion-${cIdx}`} className={`px-3 py-1.5 rounded-sm text-[12px] cursor-pointer transition-colors text-center ${cIdx === highlightedCatIndex ? 'bg-win-accent/20 dark:bg-win-accentDark/20 font-bold text-win-accent dark:text-win-accentDark' : 'hover:bg-black/5 dark:hover:bg-white/5 text-gray-800 dark:text-gray-200'}`}
+                                                                                        onMouseDown={(e) => { e.preventDefault(); handleEditCategory(sku.name, cat); }} onMouseEnter={() => setHighlightedCatIndex(cIdx)}>
                                                                                         {cat}
                                                                                     </div>
                                                                                 ))}
                                                                             </div>
                                                                         </div>
                                                                     ) : (
-                                                                        <span 
-                                                                            className="text-[11px] font-bold text-gray-500 dark:text-gray-400 bg-black/5 dark:bg-white/10 px-2.5 py-1 rounded-md cursor-pointer hover:bg-black/10 dark:hover:bg-white/20 transition-colors inline-block"
-                                                                            onClick={() => { setEditingCategorySkuName(sku.name); }}
-                                                                        >
+                                                                        <span className="text-[11px] font-bold text-gray-500 dark:text-gray-400 bg-black/5 dark:bg-white/10 px-2.5 py-1 rounded-md cursor-pointer hover:bg-black/10 dark:hover:bg-white/20 transition-colors inline-block" onClick={() => { setEditingCategorySkuName(sku.name); }}>
                                                                             {sku.category || '未分类'}
                                                                         </span>
                                                                     )}
                                                                 </td>
                                                                 <td className="px-6 py-3.5 text-right whitespace-nowrap">
-                                                                    {editingSkuName === sku.name ? (
-                                                                        <input 
-                                                                            autoFocus 
-                                                                            onFocus={e => e.target.select()}
-                                                                            className={`${winInput} w-24 text-right py-1 h-[26px] text-[13px]`} 
-                                                                            value={editingCostValue} 
-                                                                            onChange={e => setEditingCostValue(e.target.value)} 
-                                                                            onBlur={handleEditCost} 
-                                                                            onKeyDown={e => { if(e.key==='Enter') handleEditCost(); }} 
-                                                                        />
-                                                                    ) : (
-                                                                        <span className="font-black text-win-accent dark:text-win-accentDark cursor-pointer px-2 py-1 rounded hover:bg-black/5 dark:hover:bg-white/10" onClick={() => {setEditingSkuName(sku.name); setEditingCostValue(sku.cost.toString());}}>
-                                                                            ￥{sku.cost.toFixed(2)}
-                                                                        </span>
-                                                                    )}
+                                                                    <div className="flex items-center justify-end gap-2">
+                                                                        {sku.priceHistory && sku.priceHistory.length > 0 && (
+                                                                            <div className="relative group/hist inline-block">
+                                                                                <i className="ph-bold ph-trend-up text-win-accent dark:text-win-accentDark cursor-help opacity-60 hover:opacity-100 transition-opacity p-1"></i>
+                                                                                <div className="absolute right-0 top-full mt-1 w-48 bg-white/95 dark:bg-[#2d2d2d]/95 backdrop-blur-xl border border-black/10 dark:border-white/10 shadow-xl rounded-lg z-[100] p-2 hidden group-hover/hist:block text-left animate-in fade-in zoom-in-95">
+                                                                                    <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2 px-1 border-b border-black/5 dark:border-white/5 pb-1">历史进价波动雷达</div>
+                                                                                    <div className="max-h-32 overflow-y-auto custom-scrollbar">
+                                                                                        {sku.priceHistory.slice().reverse().map((h, i) => (
+                                                                                            <div key={i} className="flex justify-between items-center text-[11px] py-1 px-1">
+                                                                                                <span className="text-gray-500">{h.date}</span>
+                                                                                                <span className="font-bold text-gray-800 dark:text-gray-200">￥{h.cost.toFixed(2)}</span>
+                                                                                            </div>
+                                                                                        ))}
+                                                                                    </div>
+                                                                                </div>
+                                                                            </div>
+                                                                        )}
+                                                                        {editingSkuName === sku.name ? (
+                                                                            <input autoFocus onFocus={e => e.target.select()} className={`${winInput} w-24 text-right py-1 h-[26px] text-[13px]`} value={editingCostValue} onChange={e => setEditingCostValue(e.target.value)} onBlur={handleEditCost} onKeyDown={e => { if(e.key==='Enter') handleEditCost(); }} />
+                                                                        ) : (
+                                                                            <span className="font-black text-win-accent dark:text-win-accentDark cursor-pointer px-2 py-1 rounded hover:bg-black/5 dark:hover:bg-white/10" onClick={() => {setEditingSkuName(sku.name); setEditingCostValue(sku.cost.toString());}}>
+                                                                                ￥{sku.cost.toFixed(2)}
+                                                                            </span>
+                                                                        )}
+                                                                    </div>
                                                                 </td>
                                                                 <td className="px-6 py-3.5 text-center whitespace-nowrap">
                                                                     <button className="text-gray-400 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100" onClick={() => handleDeleteSku(sku.name)}>
@@ -1279,11 +1315,9 @@
                                         </div>
                                     </div>
 
-                                    {/* --- 第 2 列：实体注册 & 终端同步 --- */}
                                     <div className="flex-1 flex flex-col gap-6 h-full min-h-0">
                                         <div className="h-[50px] shrink-0"></div>
 
-                                        {/* 注册表单 */}
                                         <div className={`${winCard} p-5 space-y-4 shrink-0`}>
                                             <div className="text-[13px] font-bold border-b border-black/5 dark:border-white/5 pb-2 mb-3">
                                                 注册新实体入库
@@ -1303,21 +1337,40 @@
                                             </div>
                                         </div>
 
-                                        {/* 终端同步 */}
-                                        <div className={`${winCard} p-5 flex flex-col gap-3 flex-1 overflow-hidden min-h-0`}>
-                                            <div className="text-[13px] font-bold border-b border-black/5 dark:border-white/5 pb-2 shrink-0">
-                                                I/O 终端互联
+                                        {/* 终端同步 & V3.0 密钥流转控制台 */}
+                                        <div className={`${winCard} flex-1 overflow-hidden flex flex-col min-h-0`}>
+                                            <div className="p-4 border-b border-black/5 dark:border-white/5 shrink-0 flex justify-between items-center">
+                                                <span className="text-[13px] font-bold">终端互联与防灾备份</span>
+                                                <button onClick={handleExportBackupKey} className="text-[11px] font-bold text-win-accent dark:text-win-accentDark hover:bg-black/5 dark:hover:bg-white/10 px-2 py-1 rounded transition-colors flex items-center gap-1">
+                                                    <i className="ph-bold ph-key"></i>生成密钥
+                                                </button>
                                             </div>
-                                            <div className="grid grid-cols-2 gap-2 shrink-0">
-                                                <button className={`${winButtonSec} !px-2 !py-1.5 !text-[12px] flex-col gap-1 h-[60px]`} onClick={handleExportCSV}>
-                                                    <i className="ph-bold ph-download-simple text-lg text-indigo-500"></i>
-                                                    <span>导出 CSV</span>
-                                                </button>
-                                                <button className={`${winButtonSec} !px-2 !py-1.5 !text-[12px] flex-col gap-1 h-[60px]`} onClick={() => fileInputRef.current.click()}>
-                                                    <i className="ph-bold ph-upload-simple text-lg text-emerald-500"></i>
-                                                    <span>导入合并</span>
-                                                    <input type="file" ref={fileInputRef} className="hidden" accept=".csv,.txt" onChange={e => { const r = new FileReader(); r.onload = ev => handleDataProcess(ev.target.result); r.readAsText(e.target.files[0]); }} />
-                                                </button>
+                                            
+                                            <div className="p-4 flex-1 flex flex-col gap-3">
+                                                <div className="grid grid-cols-2 gap-2 shrink-0">
+                                                    <button className={`${winButtonSec} !px-2 !py-1 !text-[11px] flex-col gap-1 h-[50px]`} onClick={handleExportCSV}>
+                                                        <i className="ph-bold ph-download-simple text-[16px] text-indigo-500"></i>导出 CSV
+                                                    </button>
+                                                    <button className={`${winButtonSec} !px-2 !py-1 !text-[11px] flex-col gap-1 h-[50px]`} onClick={() => fileInputRef.current.click()}>
+                                                        <i className="ph-bold ph-upload-simple text-[16px] text-emerald-500"></i>导入 CSV
+                                                        <input type="file" ref={fileInputRef} className="hidden" accept=".csv,.txt" onChange={e => { const r = new FileReader(); r.onload = ev => handleDataProcess(ev.target.result); r.readAsText(e.target.files[0]); }} />
+                                                    </button>
+                                                </div>
+                                                <div className="flex-1 flex flex-col relative min-h-[100px] gap-2">
+                                                    <textarea 
+                                                        className={`${winInput} flex-1 text-[11px] font-mono resize-none bg-black/[0.02] dark:bg-white/[0.02] shadow-inner custom-scrollbar p-3`} 
+                                                        placeholder="在此粘贴系统备份密钥以恢复数据...&#10;&#10;也可在此直接粘贴 CSV 文本进行录入。" 
+                                                        value={importText} 
+                                                        onChange={e => setImportText(e.target.value)} 
+                                                    />
+                                                    <button 
+                                                        className={`w-full ${winButton} !py-2 ${!importText.trim() ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                                        onClick={() => handleDataProcess(importText)}
+                                                        disabled={!importText.trim()}
+                                                    >
+                                                        <i className="ph-bold ph-check-circle"></i> 确认导入配置
+                                                    </button>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
@@ -1327,14 +1380,11 @@
                         </div>
                     </main>
 
-                    {/* Windows 风格对话框 (清除确认) */}
                     {showClearConfirm && (
                         <div className="absolute inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm animate-in fade-in">
                             <div className={`${winCard} p-6 w-[400px] shadow-2xl flex flex-col gap-4 scale-100 animate-in zoom-in-95`}>
                                 <div className="flex gap-4">
-                                    <div className="w-10 h-10 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center text-red-500 shrink-0">
-                                        <i className="ph-bold ph-warning text-xl"></i>
-                                    </div>
+                                    <div className="w-10 h-10 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center text-red-500 shrink-0"><i className="ph-bold ph-warning text-xl"></i></div>
                                     <div>
                                         <h3 className="font-bold text-lg mb-1">格式化警告</h3>
                                         <p className="text-sm text-gray-500 dark:text-gray-400 leading-relaxed">即将清除所有实体的存档。<br/>该操作属于底层销毁，无法撤销。</p>
@@ -1343,6 +1393,29 @@
                                 <div className="flex justify-end gap-3 mt-2 border-t border-black/5 dark:border-white/5 pt-4">
                                     <button className={winButtonSec} onClick={() => setShowClearConfirm(false)}>取消</button>
                                     <button className={`${winButton} !bg-red-500 hover:!opacity-80`} onClick={handleClearAllSkus}>执行销毁</button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* [新增] 全局系统交互弹窗 (替代浏览器原生 alert/confirm) */}
+                    {dialog.visible && (
+                        <div className="absolute inset-0 z-[10000] flex items-center justify-center bg-black/40 backdrop-blur-sm animate-in fade-in">
+                            <div className={`${winCard} p-6 w-[400px] shadow-2xl flex flex-col gap-4 scale-100 animate-in zoom-in-95`}>
+                                <div className="flex gap-4">
+                                    <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${dialog.isAlert ? 'bg-orange-100 dark:bg-orange-900/30 text-orange-500' : 'bg-blue-100 dark:bg-blue-900/30 text-win-accent dark:text-win-accentDark'}`}>
+                                        <i className={`ph-bold ${dialog.isAlert ? 'ph-info' : 'ph-question'} text-xl`}></i>
+                                    </div>
+                                    <div className="flex-1">
+                                        <h3 className="font-bold text-lg mb-1">{dialog.title}</h3>
+                                        <p className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed whitespace-pre-wrap">{dialog.message}</p>
+                                    </div>
+                                </div>
+                                <div className="flex justify-end gap-3 mt-2 border-t border-black/5 dark:border-white/5 pt-4">
+                                    {!dialog.isAlert && <button className={winButtonSec} onClick={() => setDialog({ ...dialog, visible: false })}>取消</button>}
+                                    <button className={`${winButton} ${dialog.isAlert ? '!bg-orange-500' : ''}`} onClick={() => { if(dialog.onConfirm) dialog.onConfirm(); setDialog({ ...dialog, visible: false }); }}>
+                                        {dialog.isAlert ? '我知道了' : '确认执行'}
+                                    </button>
                                 </div>
                             </div>
                         </div>
