@@ -171,6 +171,10 @@
             // 搜索下拉框键盘选择状态
             const [highlightedSuggestionIndex, setHighlightedSuggestionIndex] = useState(-1);
             
+            // 工作台购物车单价编辑状态
+            const [editingCartItemIndex, setEditingCartItemIndex] = useState(-1);
+            const [editingCartItemCost, setEditingCartItemCost] = useState('');
+
             // 资产管理状态
             const [searchTerm, setSearchTerm] = useState('');
             const [categoryFilter, setCategoryFilter] = useState('All'); 
@@ -196,6 +200,26 @@
             const [importText, setImportText] = useState(''); 
 
             const fileInputRef = useRef(null);
+            const historyScrollRef = useRef(null); // [新增] 历史清单容器的独立 Ref
+
+            // [新增] 智能监听鼠标滚轮事件，实现完美的横向滚动（完美兼容卡片内部的垂直滚动）
+            useEffect(() => {
+                const el = historyScrollRef.current;
+                if (!el) return;
+                const handleWheel = (e) => {
+                    const innerScroll = e.target.closest('.custom-scrollbar');
+                    // 如果鼠标在卡片内部的清单上（且商品数量超出产生了垂直滚动条），则让原生滚动接管，不干预
+                    if (innerScroll && innerScroll.scrollHeight > innerScroll.clientHeight) return;
+                    
+                    if (e.deltaY !== 0) {
+                        e.preventDefault();
+                        el.scrollLeft += e.deltaY;
+                    }
+                };
+                // 使用 passive: false 以允许 e.preventDefault() 拦截默认垂直滚动
+                el.addEventListener('wheel', handleWheel, { passive: false });
+                return () => el.removeEventListener('wheel', handleWheel);
+            }, [activeView]);
 
             // 数据持久化初始化
             useEffect(() => {
@@ -304,6 +328,31 @@
             };
 
             const clearCart = () => { setCart([]); saveToLocal({ cart: [] }); setSelectedCartIndex(-1); };
+
+            const handleEditCartItemCost = (idx) => {
+                const newCost = parseFloat(String(editingCartItemCost).replace(/[^\d.]/g, ''));
+                if (isNaN(newCost)) {
+                    setEditingCartItemIndex(-1);
+                    return;
+                }
+
+                const skuName = cart[idx].sku.name;
+                checkPriceWarning(skuName, newCost);
+                const updatedSkus = skus.map(s => s.name === skuName ? recordPriceHistory(s, newCost) : s);
+                
+                const updatedCart = cart.map(c => {
+                    if (c.sku.name === skuName) {
+                        return { ...c, sku: { ...c.sku, cost: newCost } };
+                    }
+                    return c;
+                });
+
+                setSkus(updatedSkus);
+                setCart(updatedCart);
+                saveToLocal({ skus: updatedSkus, cart: updatedCart });
+                setEditingCartItemIndex(-1);
+                showToast(`已更新 [${skuName}] 的单价为 ￥${newCost.toFixed(2)}，并同步至底层矩阵`);
+            };
 
             const purchaseStats = useMemo(() => {
                 if (cart.length === 0) return { totalQty: 0, totalCost: 0 };
@@ -495,6 +544,27 @@
                 }));
                 return { pieData: sorted, totalCost, totalQty };
             }, [savedLists]);
+
+            const handleExportAnalyticsCSV = () => {
+                const BOM = '\uFEFF';
+                let csvContent = BOM + "数据魔方分析报告\n";
+                csvContent += `生成时间,${new Date().toLocaleString()}\n`;
+                csvContent += `历史总流转资金,￥${analyticsData.totalCost.toFixed(2)}\n`;
+                csvContent += `历史总流转件数,${analyticsData.totalQty}件\n\n`;
+                
+                csvContent += "分类,资金占比(￥),占比(%),件数\n";
+                analyticsData.pieData.forEach(cat => {
+                    const percentage = analyticsData.totalCost > 0 ? ((cat.value / analyticsData.totalCost) * 100).toFixed(2) : 0;
+                    csvContent += `${cat.label},${cat.value.toFixed(2)},${percentage}%,${cat.qty}\n`;
+                });
+                
+                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(blob);
+                link.download = `数据魔方分析报告_${new Date().toISOString().split('T')[0]}.csv`;
+                document.body.appendChild(link); link.click(); document.body.removeChild(link);
+                showToast('数据魔方分析报告已成功导出');
+            };
 
             // ---- 下拉交互 ----
             const querySuggestions = useMemo(() => {
@@ -788,8 +858,6 @@
                                 ========================================= */}
                             {activeView === 'workspace' && (
                                 <div className="flex gap-6 w-full h-full animate-in fade-in min-h-0">
-                                    
-                                    {/* --- 第 1 列：检索与购物车 --- */}
                                     <div className="flex-[2] flex flex-col gap-6 h-full min-h-0">
                                         <div className="flex justify-between items-end shrink-0 h-[50px] pb-1">
                                             <div>
@@ -798,7 +866,6 @@
                                             </div>
                                         </div>
 
-                                        {/* 搜索控制台 */}
                                         <div className={`${winCard} p-4 flex flex-col gap-3 relative z-30 overflow-visible shrink-0 quick-add-controls`}>
                                             <div className="flex items-center justify-between">
                                                 <div className="text-xs font-bold flex items-center gap-1.5 transition-colors">
@@ -860,7 +927,6 @@
                                             </div>
                                         </div>
 
-                                        {/* 购物车列表 */}
                                         <div className={`${winCard} flex-1 overflow-hidden flex flex-col min-h-0`}>
                                             <div className="px-5 py-3.5 border-b border-black/5 dark:border-white/5 flex justify-between items-center bg-black/[0.02] dark:bg-white/[0.02] shrink-0">
                                                 <span className="text-[13px] font-bold text-gray-800 dark:text-gray-200">装载清单明细 ({cart.length})</span>
@@ -891,7 +957,35 @@
                                                                     <div className="text-[13px] font-bold truncate text-gray-900 dark:text-gray-100">{item.sku.name}</div>
                                                                     <div className="text-[11px] text-gray-500 mt-1 flex items-center gap-1.5">
                                                                         <span className="px-1.5 py-0.5 bg-black/5 dark:bg-white/10 rounded font-medium text-gray-600 dark:text-gray-400">{item.sku.category || '未分类'}</span>
-                                                                        <span>单价 ￥{item.sku.cost.toFixed(2)}</span>
+                                                                        <div className="flex items-center gap-1">
+                                                                            <span>单价</span>
+                                                                            {editingCartItemIndex === idx ? (
+                                                                                <div className="flex items-center" onClick={e => e.stopPropagation()}>
+                                                                                    <span className="text-gray-400">￥</span>
+                                                                                    <input
+                                                                                        autoFocus
+                                                                                        onFocus={e => e.target.select()}
+                                                                                        className={`${winInput} w-16 px-1 py-0 h-[22px] text-[12px] text-win-accent dark:text-win-accentDark font-bold bg-white/60 dark:bg-black/40`}
+                                                                                        value={editingCartItemCost}
+                                                                                        onChange={e => setEditingCartItemCost(e.target.value)}
+                                                                                        onBlur={() => handleEditCartItemCost(idx)}
+                                                                                        onKeyDown={e => { if (e.key === 'Enter') e.target.blur(); }}
+                                                                                    />
+                                                                                </div>
+                                                                            ) : (
+                                                                                <span 
+                                                                                    className="font-bold text-win-accent dark:text-win-accentDark cursor-pointer hover:bg-black/5 dark:hover:bg-white/10 px-1 rounded transition-colors"
+                                                                                    onClick={(e) => { 
+                                                                                        e.stopPropagation(); 
+                                                                                        setEditingCartItemIndex(idx); 
+                                                                                        setEditingCartItemCost(item.sku.cost.toString()); 
+                                                                                    }}
+                                                                                    title="点击修改单价并自动同步至数据库"
+                                                                                >
+                                                                                    ￥{item.sku.cost.toFixed(2)}
+                                                                                </span>
+                                                                            )}
+                                                                        </div>
                                                                     </div>
                                                                 </div>
                                                                 <div className="flex items-center gap-4 shrink-0">
@@ -916,7 +1010,6 @@
                                         </div>
                                     </div>
 
-                                    {/* --- 第 2 列：资金统计 & 侧边清单缩略图 --- */}
                                     <div className="flex-1 flex flex-col gap-6 h-full min-h-0">
                                         <div className="flex justify-end items-end shrink-0 h-[50px] pb-1">
                                             <div className="flex flex-col items-end select-none cursor-default gold-engraved">
@@ -963,7 +1056,6 @@
                                         </div>
                                     </div>
 
-                                    {/* --- 第 3 列：流向榜单 --- */}
                                     <div className="flex-1 flex flex-col gap-6 h-full min-h-0 w-full overflow-hidden">
                                         <div className="flex justify-start items-end shrink-0 h-[50px] pb-1 w-full overflow-hidden">
                                             <div>
@@ -996,12 +1088,11 @@
                                             </div>
                                         </div>
                                     </div>
-
                                 </div>
                             )}
 
                             {/* =========================================
-                                视图 2：历史清单流水 (横向全景展示)
+                                视图 2：历史清单流水 
                                 ========================================= */}
                             {activeView === 'history' && (
                                 <div className="flex flex-col w-full h-full animate-in fade-in min-h-0">
@@ -1016,7 +1107,7 @@
                                     </div>
 
                                     <div className={`${winCard} flex-1 overflow-hidden flex flex-col min-h-0 mt-6`}>
-                                        <div className="flex-1 w-full overflow-x-auto overflow-y-hidden horizontal-scroll p-6 flex gap-6 items-start">
+                                        <div ref={historyScrollRef} className="flex-1 w-full overflow-x-auto overflow-y-hidden horizontal-scroll p-6 flex gap-6 items-start">
                                             {savedLists.length === 0 ? (
                                                 <div className="w-full h-full flex flex-col items-center justify-center opacity-30">
                                                     <i className="ph-bold ph-archive-box text-6xl mb-4"></i>
@@ -1180,7 +1271,7 @@
                             )}
 
                             {/* =========================================
-                                视图 4：数据魔方分析 (V3.0 全景业务洞察)
+                                视图 4：数据魔方分析 
                                 ========================================= */}
                             {activeView === 'analytics' && (
                                 <div className="flex gap-6 w-full h-full animate-in fade-in min-h-0">
@@ -1189,6 +1280,11 @@
                                             <div>
                                                 <h1 className="text-2xl font-bold leading-none">数据魔方分析</h1>
                                                 <p className="text-[10px] text-gray-500 dark:text-gray-400 mt-1.5 uppercase tracking-wider">Business Analytics</p>
+                                            </div>
+                                            <div className="flex items-center gap-3">
+                                                <button onClick={handleExportAnalyticsCSV} className={`${winButtonSec} !text-emerald-600 dark:!text-emerald-400 hover:!bg-emerald-50 dark:hover:!bg-emerald-900/20 !py-1.5`}>
+                                                    <i className="ph-bold ph-download-simple"></i> 下载魔方数据
+                                                </button>
                                             </div>
                                         </div>
 
@@ -1243,7 +1339,7 @@
                             )}
 
                             {/* =========================================
-                                视图 5：资产数据库 (V3.0 加入进价历史波动雷达)
+                                视图 5：资产数据库 
                                 ========================================= */}
                             {activeView === 'database' && (
                                 <div className="flex gap-6 w-full h-full animate-in fade-in min-h-0">
