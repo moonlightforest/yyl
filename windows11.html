@@ -163,15 +163,12 @@
             
             const [activeView, setActiveView] = useState('workspace'); // workspace, history, owed, analytics, database
             
-            // 搜索与选中状态 (已修复遗漏的状态变量)
             const [queryTerm, setQueryTerm] = useState('');
             const [showQueryDropdown, setShowQueryDropdown] = useState(false);
             const [selectedCartIndex, setSelectedCartIndex] = useState(-1);
             
-            // 搜索下拉框键盘选择状态
             const [highlightedSuggestionIndex, setHighlightedSuggestionIndex] = useState(-1);
             
-            // 工作台购物车单价编辑状态
             const [editingCartItemIndex, setEditingCartItemIndex] = useState(-1);
             const [editingCartItemCost, setEditingCartItemCost] = useState('');
 
@@ -200,15 +197,14 @@
             const [importText, setImportText] = useState(''); 
 
             const fileInputRef = useRef(null);
-            const historyScrollRef = useRef(null); // [新增] 历史清单容器的独立 Ref
+            const historyScrollRef = useRef(null); 
 
-            // [新增] 智能监听鼠标滚轮事件，实现完美的横向滚动（完美兼容卡片内部的垂直滚动）
+            // 智能监听鼠标滚轮事件
             useEffect(() => {
                 const el = historyScrollRef.current;
                 if (!el) return;
                 const handleWheel = (e) => {
                     const innerScroll = e.target.closest('.custom-scrollbar');
-                    // 如果鼠标在卡片内部的清单上（且商品数量超出产生了垂直滚动条），则让原生滚动接管，不干预
                     if (innerScroll && innerScroll.scrollHeight > innerScroll.clientHeight) return;
                     
                     if (e.deltaY !== 0) {
@@ -216,7 +212,6 @@
                         el.scrollLeft += e.deltaY;
                     }
                 };
-                // 使用 passive: false 以允许 e.preventDefault() 拦截默认垂直滚动
                 el.addEventListener('wheel', handleWheel, { passive: false });
                 return () => el.removeEventListener('wheel', handleWheel);
             }, [activeView]);
@@ -269,7 +264,6 @@
                 return () => document.removeEventListener('mousedown', handleClickOutside);
             }, [selectedCartIndex, contextMenu.visible]);
 
-            // V3.0 价格预警与历史记录计算核心引擎
             const checkPriceWarning = (skuName, newCost) => {
                 const existing = skus.find(s => s.name === skuName);
                 if(existing) {
@@ -291,7 +285,6 @@
                 return { ...existingSku, cost: newCost, priceHistory: [...hist, { date: dateStr, cost: existingSku.cost }] };
             };
 
-            // ---- 核心进货业务逻辑 ----
             const handleQuickAddPurchase = (sku, amount) => {
                 if (!sku) return;
                 setCart(prev => {
@@ -538,7 +531,6 @@
                         totalQty += item.qty;
                     });
                 });
-                // Sort by value descending and assign colors
                 const sorted = Object.values(categoryStats).sort((a,b)=>b.value - a.value).map((cat, idx) => ({
                     ...cat, color: CHART_COLORS[idx % CHART_COLORS.length]
                 }));
@@ -600,19 +592,16 @@
                 setSortConfig({ key, direction });
             };
 
-            // 资产矩阵：排序图标渲染器
             const getSortIcon = (columnName) => {
                 if (sortConfig.key !== columnName) return <i className="ph-bold ph-caret-up-down text-gray-300 dark:text-gray-600 opacity-0 group-hover:opacity-100 transition-opacity"></i>;
                 if (sortConfig.direction === 'ascending') return <i className="ph-bold ph-caret-up text-win-accent dark:text-win-accentDark"></i>;
                 return <i className="ph-bold ph-caret-down text-win-accent dark:text-win-accentDark"></i>;
             };
 
-            // 资产矩阵：综合过滤与排序引擎
             const processedSkus = useMemo(() => {
                 let sortableSkus = [...skus];
                 
                 if (searchTerm) sortableSkus = sortableSkus.filter(s => s.name.toLowerCase().includes(searchTerm.toLowerCase()));
-                
                 if (categoryFilter !== 'All') sortableSkus = sortableSkus.filter(s => (s.category || '未分类') === categoryFilter);
                 
                 if (sortConfig.key !== null) {
@@ -678,7 +667,6 @@
                 setShowClearConfirm(false); showToast('数据库矩阵已重置');
             };
 
-            // V3.0 核心备份流转引擎：智能识别 CSV 还是 备份 JSON
             const handleDataProcess = (raw) => {
                 if (!raw.trim()) return;
                 const str = raw.trim();
@@ -697,7 +685,7 @@
                         });
                         return;
                     }
-                } catch(e) { /* 非密钥，进入普通CSV解析 */ }
+                } catch(e) { }
 
                 const lines = str.split(/\r?\n/).filter(l => l.trim() !== "");
                 const results = lines.map((line) => {
@@ -756,10 +744,8 @@
 
             return (
                 <div className="flex h-screen w-screen overflow-hidden relative" onContextMenu={(e)=>e.preventDefault()}>
-                    {/* Win11 极光背景 */}
                     <div className="win-bg-bloom"></div>
 
-                    {/* 全局右键菜单 */}
                     {contextMenu.visible && (
                         <div 
                             className="fixed z-[1000] w-48 bg-white/95 dark:bg-[#2d2d2d]/95 backdrop-blur-xl border border-black/10 dark:border-white/10 shadow-2xl rounded-lg py-1.5 flex flex-col"
@@ -790,14 +776,12 @@
                         </div>
                     )}
 
-                    {/* 全局悬浮备注提示 */}
                     {remarkTooltip.visible && remarkTooltip.text && (
                         <div className="fixed z-[1000] bg-gray-900/95 dark:bg-white/95 backdrop-blur-sm text-white dark:text-gray-900 px-3 py-2 rounded-md shadow-xl text-[12px] max-w-xs break-words pointer-events-none" style={{ top: remarkTooltip.y + 15, left: remarkTooltip.x + 15 }}>
                             {remarkTooltip.text}
                         </div>
                     )}
 
-                    {/* 左侧侧边栏 (Sidebar) 窄化至 200px */}
                     <aside className="w-[200px] bg-white/40 dark:bg-black/40 backdrop-blur-3xl border-r border-black/5 dark:border-white/5 flex flex-col z-20 shadow-lg shrink-0">
                         <div className="p-5 flex items-center gap-2.5">
                             <div className="w-7 h-7 bg-win-accent dark:bg-win-accentDark rounded-md flex items-center justify-center text-white dark:text-gray-900 shadow-md shrink-0">
@@ -839,10 +823,7 @@
                         </div>
                     </aside>
 
-                    {/* 右侧主工作区 */}
                     <main className="flex-1 flex flex-col relative z-10 overflow-hidden bg-transparent">
-                        
-                        {/* 全局 Toast 通知 */}
                         {statusMsg.text && (
                             <div className="absolute top-6 left-1/2 -translate-x-1/2 z-[9999] animate-in slide-in-from-top-4 fade-in">
                                 <div className={`border shadow-lg px-4 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${statusMsg.type === 'warning' ? 'bg-orange-50 dark:bg-[#3d2a10] border-orange-200 dark:border-orange-900/50 text-orange-600 dark:text-orange-400' : 'bg-white dark:bg-[#333] border-black/10 dark:border-white/10 text-gray-800 dark:text-gray-100'}`}>
@@ -953,11 +934,12 @@
                                                     <div className="space-y-1">
                                                         {cart.map((item, idx) => (
                                                             <div key={idx} id={`cart-item-${idx}`} onClick={() => setSelectedCartIndex(idx)} className={`cart-item-row flex items-center justify-between p-3 rounded-lg cursor-pointer transition-colors group ${selectedCartIndex === idx ? 'bg-win-accent/10 dark:bg-win-accentDark/10 border-l-4 border-win-accent dark:border-win-accentDark' : 'hover:bg-black/5 dark:hover:bg-white/5 border-l-4 border-transparent'}`}>
-                                                                <div className="flex-1 truncate pr-4">
-                                                                    <div className="text-[13px] font-bold truncate text-gray-900 dark:text-gray-100">{item.sku.name}</div>
-                                                                    <div className="text-[11px] text-gray-500 mt-1 flex items-center gap-1.5">
-                                                                        <span className="px-1.5 py-0.5 bg-black/5 dark:bg-white/10 rounded font-medium text-gray-600 dark:text-gray-400">{item.sku.category || '未分类'}</span>
-                                                                        <div className="flex items-center gap-1">
+                                                                
+                                                                <div className="flex-1 min-w-0 pr-3 flex flex-col justify-center">
+                                                                    <div className="text-[13px] font-bold truncate text-gray-900 dark:text-gray-100" title={item.sku.name}>{item.sku.name}</div>
+                                                                    <div className="text-[11px] text-gray-500 mt-1 flex items-center gap-2">
+                                                                        <span className="px-1.5 py-0.5 bg-black/5 dark:bg-white/10 rounded font-medium text-gray-600 dark:text-gray-400 shrink-0 max-w-[80px] truncate" title={item.sku.category}>{item.sku.category || '未分类'}</span>
+                                                                        <div className="flex items-center gap-1 shrink-0">
                                                                             <span>单价</span>
                                                                             {editingCartItemIndex === idx ? (
                                                                                 <div className="flex items-center" onClick={e => e.stopPropagation()}>
@@ -988,18 +970,21 @@
                                                                         </div>
                                                                     </div>
                                                                 </div>
-                                                                <div className="flex items-center gap-4 shrink-0">
-                                                                    <div className="flex flex-col items-end">
-                                                                        <span className="text-[10px] text-gray-400">小计</span>
-                                                                        <span className="text-[13px] font-black text-win-accent dark:text-win-accentDark">￥{(item.sku.cost * item.qty).toFixed(2)}</span>
+
+                                                                <div className="flex items-center shrink-0">
+                                                                    <div className="flex flex-col items-end justify-center w-20 sm:w-24 pr-3 border-r border-black/10 dark:border-white/10 shrink-0">
+                                                                        <span className="text-[10px] text-gray-400 leading-none mb-1">小计</span>
+                                                                        <span className="text-[13px] font-black text-win-accent dark:text-win-accentDark truncate w-full text-right" title={`￥${(item.sku.cost * item.qty).toFixed(2)}`}>
+                                                                            ￥{(item.sku.cost * item.qty).toFixed(2)}
+                                                                        </span>
                                                                     </div>
-                                                                    <div className="w-px h-8 bg-gray-200 dark:bg-gray-700 mx-1"></div>
-                                                                    <div className="flex items-center gap-1">
+                                                                    
+                                                                    <div className="flex items-center justify-end gap-1 pl-3 w-[130px] shrink-0">
                                                                         <input type="number" value={item.qty === 0 ? '' : item.qty} onClick={e => e.stopPropagation()} onFocus={e => e.target.select()}
                                                                             onChange={(e) => updateCartQty(idx, e.target.value === '' ? 0 : parseInt(e.target.value))} onKeyDown={e => { if (e.key === 'Enter') e.target.blur(); }}
-                                                                            className={`${winInput} w-20 text-center py-1 font-bold h-[30px] text-[13px]`} 
+                                                                            className={`${winInput} w-24 !px-1 text-center py-1 font-bold h-[30px] text-[13px]`} 
                                                                         />
-                                                                        <button onClick={(e)=>removeFromCart(idx, e)} className="w-7 h-7 flex items-center justify-center text-red-400 opacity-0 group-hover:opacity-100 hover:bg-red-50 dark:hover:bg-red-900/30 rounded transition-all"><i className="ph-bold ph-x text-sm"></i></button>
+                                                                        <button onClick={(e)=>removeFromCart(idx, e)} className="w-7 h-7 flex items-center justify-center text-red-400 opacity-0 group-hover:opacity-100 hover:bg-red-50 dark:hover:bg-red-900/30 rounded transition-all shrink-0"><i className="ph-bold ph-x text-sm"></i></button>
                                                                     </div>
                                                                 </div>
                                                             </div>
