@@ -1,0 +1,1276 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GridLab Pro - 量化回测引擎</title>
+  
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- 引入 Chart.js 及手势和缩放插件 -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: { slate: { 850: '#151e2e', 900: '#0f172a' }, brand: '#3b82f6' }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #475569; border-radius: 3px; }
+    .dark ::-webkit-scrollbar-thumb { background: #334155; }
+    
+    .tab-content { display: none; }
+    .tab-content.active { display: block; animation: fadeIn 0.3s ease-in-out; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+    input, select { outline: none; transition: border-color 0.2s; }
+    input:focus, select:focus { border-color: #3b82f6; }
+  </style>
+</head>
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200 font-sans h-screen flex overflow-hidden transition-colors duration-300">
+
+  <!-- 左侧导航：回测任务列表 -->
+  <aside class="w-64 bg-white dark:bg-slate-850 border-r border-slate-200 dark:border-slate-800 flex flex-col flex-shrink-0 shadow-lg z-20">
+    <div class="h-16 flex items-center justify-between px-5 border-b border-slate-200 dark:border-slate-800">
+      <div class="flex items-center space-x-2">
+        <i data-lucide="bar-chart-2" class="text-blue-600 dark:text-blue-400"></i>
+        <div>
+          <h1 class="font-bold text-lg leading-tight tracking-tight">GridLab <span class="text-blue-500">Pro</span></h1>
+          <p class="text-[10px] text-slate-400 font-mono">Backtest Engine v5.0</p>
+        </div>
+      </div>
+      <button id="themeToggle" class="p-1.5 rounded-md hover:bg-slate-100 dark:hover:bg-slate-700 transition">
+        <i data-lucide="moon" class="w-4 h-4 hidden dark:block text-yellow-400"></i>
+        <i data-lucide="sun" class="w-4 h-4 block dark:hidden text-orange-500"></i>
+      </button>
+    </div>
+
+    <div class="p-4 border-b border-slate-100 dark:border-slate-800">
+      <button onclick="createNewTask()" class="w-full py-2 bg-slate-800 dark:bg-blue-600 hover:opacity-90 text-white rounded-lg text-sm font-medium transition flex items-center justify-center">
+        <i data-lucide="plus-circle" class="w-4 h-4 mr-1"></i> 新建回测任务
+      </button>
+    </div>
+
+    <div class="flex-1 overflow-y-auto p-3 space-y-2" id="taskList">
+      <!-- 任务列表 JS 动态生成 -->
+    </div>
+  </aside>
+
+  <!-- 主内容区 -->
+  <main class="flex-1 flex flex-col h-screen overflow-hidden bg-slate-50 dark:bg-slate-900/50">
+    
+    <!-- 顶部状态与导航 -->
+    <header class="bg-white dark:bg-slate-850 border-b border-slate-200 dark:border-slate-800 shadow-sm z-10 shrink-0">
+      <div class="px-6 py-4 flex justify-between items-center">
+        <div>
+          <h2 class="text-xl font-bold text-slate-800 dark:text-white flex items-center" id="headTitle">
+            加载中...
+          </h2>
+          <div class="text-xs text-slate-500 mt-1" id="headSubInfo">标的: -- | 数据跨度: --</div>
+        </div>
+        
+        <div class="flex space-x-4">
+          <button onclick="runBacktest()" class="px-6 py-2 bg-blue-600 text-white rounded-lg text-sm font-bold hover:bg-blue-700 transition flex items-center shadow-lg shadow-blue-500/30">
+            <i data-lucide="play" class="w-4 h-4 mr-2"></i> 开始回测
+          </button>
+        </div>
+      </div>
+
+      <!-- 核心选项卡 -->
+      <div class="px-6 flex space-x-6" id="tabs">
+        <button id="btn-tab-config" onclick="switchTab('config')" class="tab-btn pb-3 text-sm font-medium border-b-2 border-blue-600 text-blue-600 transition-all flex items-center">
+          <i data-lucide="settings" class="w-4 h-4 mr-1"></i> 策略与数据配置
+        </button>
+        <button id="btn-tab-playback" onclick="switchTab('playback')" class="tab-btn pb-3 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 transition-all flex items-center">
+          <i data-lucide="play-circle" class="w-4 h-4 mr-1"></i> 动态回放推演
+        </button>
+        <button id="btn-tab-report" onclick="switchTab('report')" class="tab-btn pb-3 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 transition-all flex items-center">
+          <i data-lucide="pie-chart" class="w-4 h-4 mr-1"></i> 综合回测报告
+        </button>
+        <button id="btn-tab-ledger" onclick="switchTab('ledger')" class="tab-btn pb-3 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 transition-all flex items-center">
+          <i data-lucide="list" class="w-4 h-4 mr-1"></i> 交易流水详情
+        </button>
+      </div>
+    </header>
+
+    <!-- 选项卡内容区 -->
+    <div class="flex-1 overflow-y-auto p-6" id="mainContent">
+      
+      <!-- Tab 1: 配置区 (数据 + 参数) -->
+      <div id="tab-config" class="tab-content active h-full">
+        <div class="grid grid-cols-1 xl:grid-cols-2 gap-6 h-full">
+          <!-- 左半边：数据源 -->
+          <div class="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 flex flex-col">
+            <div class="px-5 py-4 border-b border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-850/50 rounded-t-xl flex justify-between items-center">
+              <h3 class="font-bold flex items-center"><i data-lucide="database" class="w-4 h-4 mr-2 text-blue-500"></i> 回测数据源</h3>
+              <div class="flex items-center space-x-3">
+                <button onclick="clearData()" class="text-xs text-red-500 hover:underline">清空数据</button>
+                <div class="w-px h-3 bg-slate-300 dark:bg-slate-600"></div>
+                <button onclick="loadMockData()" class="text-xs text-blue-600 dark:text-blue-400 hover:underline">载入高波动模拟行情</button>
+              </div>
+            </div>
+            <div class="p-5 flex-1 flex flex-col">
+              <div class="border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-xl p-6 text-center hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors relative mb-4">
+                <input type="file" id="csvFileInput" accept=".csv" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer" onchange="handleCSVUpload(event)">
+                <i data-lucide="upload-cloud" class="w-8 h-8 mx-auto text-slate-400 mb-2"></i>
+                <p class="text-sm font-bold text-slate-700 dark:text-slate-200">上传本地 CSV 历史K线</p>
+                <p class="text-xs text-slate-400 mt-1" id="uploadStatus">支持各种周期行情数据</p>
+              </div>
+
+              <div id="dataStatusPanel" class="flex-1 bg-slate-50 dark:bg-slate-900 rounded-lg border border-slate-100 dark:border-slate-700 p-4">
+                <div class="flex items-center justify-between mb-4">
+                  <span class="text-sm font-bold">当前数据状态</span>
+                  <span class="px-2 py-1 bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 text-xs rounded border border-green-200 dark:border-green-800" id="dataReadyBadge">未就绪</span>
+                </div>
+                <div class="grid grid-cols-2 gap-4 text-sm">
+                  <div><p class="text-slate-500 text-xs mb-1">数据量</p><p class="font-mono font-bold" id="infoDataLen">0 K线</p></div>
+                  <div><p class="text-slate-500 text-xs mb-1">起始时间</p><p class="font-mono" id="infoDataStart">--</p></div>
+                  <div><p class="text-slate-500 text-xs mb-1">期初价格</p><p class="font-mono" id="infoPriceStart">--</p></div>
+                  <div><p class="text-slate-500 text-xs mb-1">结束时间</p><p class="font-mono" id="infoDataEnd">--</p></div>
+                </div>
+                <div id="csvMappingArea" class="hidden mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
+                  <p class="text-xs font-bold mb-2">CSV列映射:</p>
+                  <div class="flex space-x-2">
+                    <select id="csvDateCol" class="w-1/2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded text-xs p-1"></select>
+                    <select id="csvPriceCol" class="w-1/2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded text-xs p-1"></select>
+                  </div>
+                  <button onclick="applyCSVMapping()" class="mt-2 w-full py-1.5 bg-slate-800 dark:bg-slate-700 text-white text-xs rounded">确认映射并加载</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 右半边：策略参数 -->
+          <div class="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 flex flex-col">
+            <div class="px-5 py-4 border-b border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-850/50 rounded-t-xl flex justify-between items-center">
+              <h3 class="font-bold flex items-center"><i data-lucide="sliders" class="w-4 h-4 mr-2 text-indigo-500"></i> 网格与资金参数 (独立批次浮动模型)</h3>
+              <button id="btn-save-config" onclick="saveConfig()" class="text-xs px-3 py-1 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800 rounded hover:bg-indigo-100 transition flex items-center">
+                保存配置
+              </button>
+            </div>
+            <div class="p-5 flex-1 overflow-y-auto">
+              <form id="configForm" class="space-y-5">
+                <!-- 基础资金 -->
+                <div>
+                  <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">期初资产与策略模式</h4>
+                  <div class="mb-4">
+                    <label class="block text-xs text-slate-500 mb-1">核心交易策略模式</label>
+                    <select id="p_strategyMode" class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded px-3 py-1.5 text-sm focus:border-blue-500">
+                      <option value="classic">经典跟随模式 (默认：跌买涨卖，空仓后立即接回底仓)</option>
+                      <option value="conservative">保守止盈模式 (只要触发卖空，引擎立刻休眠不再交易)</option>
+                      <option value="trailing">动态追踪模式 (网格整体区间随价格破顶而自动上移)</option>
+                    </select>
+                  </div>
+                  <div class="grid grid-cols-3 gap-4">
+                    <div><label class="block text-xs text-slate-500 mb-1">投入总本金 (¥)</label><input type="number" id="p_totalCapital" class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded px-3 py-1.5 text-sm font-mono focus:border-blue-500"></div>
+                    <div><label class="block text-xs text-slate-500 mb-1">底仓持股 (股)</label><input type="number" id="p_shares" class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded px-3 py-1.5 text-sm font-mono focus:border-blue-500"></div>
+                    <div><label class="block text-xs text-slate-500 mb-1" title="留空或为0则默认使用回测首日价格">初次建仓基准价</label><input type="number" step="0.01" id="p_basePrice" placeholder="默认首日价" class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded px-3 py-1.5 text-sm font-mono focus:border-blue-500"></div>
+                  </div>
+                </div>
+                <div class="h-px bg-slate-100 dark:bg-slate-700"></div>
+                <!-- 网格参数 -->
+                <div>
+                  <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">网格拓扑结构 (浮动锚点)</h4>
+                  <div class="grid grid-cols-2 gap-4 mb-4">
+                    <div><label class="block text-xs text-slate-500 mb-1">初始交易上限价</label><input type="number" step="0.01" id="p_upper" class="w-full bg-slate-50 dark:bg-slate-900 border border-red-200 dark:border-red-900/50 rounded px-3 py-1.5 text-sm font-mono text-red-600 dark:text-red-400"></div>
+                    <div><label class="block text-xs text-slate-500 mb-1">初始交易下限价</label><input type="number" step="0.01" id="p_lower" class="w-full bg-slate-50 dark:bg-slate-900 border border-green-200 dark:border-green-900/50 rounded px-3 py-1.5 text-sm font-mono text-green-600 dark:text-green-400"></div>
+                  </div>
+                  <div class="grid grid-cols-3 gap-4">
+                    <div><label class="block text-xs text-slate-500 mb-1">每格幅度/差价</label><input type="number" step="0.01" id="p_gridGap" class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded px-3 py-1.5 text-sm font-mono" placeholder="金额或百分比"></div>
+                    <div>
+                      <label class="block text-xs text-slate-500 mb-1">幅度模式</label>
+                      <select id="p_gridMode" class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded px-3 py-1.5 text-sm">
+                        <option value="arithmetic">等差 (固定金额)</option>
+                        <option value="geometric">等比 (固定百分比)</option>
+                      </select>
+                    </div>
+                    <div><label class="block text-xs text-slate-500 mb-1">每次交易单位(股)</label><input type="number" id="p_sharesPerGrid" class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded px-3 py-1.5 text-sm font-mono"></div>
+                  </div>
+                </div>
+                <div class="h-px bg-slate-100 dark:bg-slate-700"></div>
+                <!-- 摩擦成本 -->
+                <div>
+                  <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">仿真摩擦环境</h4>
+                  <div class="grid grid-cols-3 gap-4">
+                    <div><label class="block text-xs text-slate-500 mb-1">券商佣金率</label><input type="number" step="0.00001" id="p_commRate" class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded px-3 py-1.5 text-sm font-mono"></div>
+                    <div><label class="block text-xs text-slate-500 mb-1">印花税率(卖出)</label><input type="number" step="0.00001" id="p_stampDuty" class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded px-3 py-1.5 text-sm font-mono"></div>
+                    <div><label class="block text-xs text-slate-500 mb-1">滑点率预估</label><input type="number" step="0.0001" id="p_slippage" class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded px-3 py-1.5 text-sm font-mono"></div>
+                  </div>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab 2: 动态回放 (Playback) -->
+      <div id="tab-playback" class="tab-content h-full">
+        <div class="flex flex-col h-full bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm relative overflow-hidden">
+          
+          <!-- 播控栏 -->
+          <div class="px-6 py-4 border-b border-slate-200 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-850/80 flex justify-between items-center shrink-0 z-20">
+            <h3 class="font-bold flex items-center">
+              <i data-lucide="video" class="w-4 h-4 mr-2 text-indigo-500"></i> 回测走势动态推演
+              <span class="text-[11px] text-slate-400 font-normal ml-3 bg-slate-200/50 dark:bg-slate-700/50 px-2 py-1 rounded">💡 悬浮图表：滚轮缩放，按住拖拽</span>
+            </h3>
+            
+            <div class="flex items-center space-x-3">
+              <!-- 区间筛选器 -->
+              <div class="flex items-center bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded overflow-hidden">
+                <input type="date" id="pb-start-date" class="bg-transparent text-xs px-2 py-1.5 outline-none text-slate-600 dark:text-slate-300">
+                <span class="text-slate-400 text-xs px-1">至</span>
+                <input type="date" id="pb-end-date" class="bg-transparent text-xs px-2 py-1.5 outline-none text-slate-600 dark:text-slate-300">
+              </div>
+              <button onclick="initPlayback()" class="text-xs px-2 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded transition border border-slate-200 dark:border-slate-700" title="应用区间并重新开始">刷新区间</button>
+              
+              <div class="h-6 w-px bg-slate-300 dark:bg-slate-600 mx-1"></div>
+              
+              <button onclick="togglePlayback()" id="btn-pb-toggle" class="text-sm px-4 py-1.5 bg-slate-800 dark:bg-slate-700 text-white rounded hover:opacity-90 transition font-bold w-24">暂停</button>
+              <select id="pb-speed" class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm rounded px-2 py-1.5 text-slate-600 dark:text-slate-300 outline-none">
+                <option value="1">1x 正常</option>
+                <option value="5" selected>5x 较快</option>
+                <option value="20">20x 高速</option>
+                <option value="100">100x 极速</option>
+              </select>
+              <button onclick="skipPlayback()" class="text-sm text-blue-600 dark:text-blue-400 hover:underline ml-2">跳过演示</button>
+            </div>
+          </div>
+
+          <!-- 图表区 -->
+          <div class="flex-1 relative p-4" id="playbackChartContainer">
+            <canvas id="playbackChart"></canvas>
+            <!-- 回放完成遮罩 -->
+            <div id="pb-finish-overlay" class="absolute inset-0 bg-slate-800/40 dark:bg-slate-900/60 backdrop-blur-md hidden flex-col items-center justify-center z-30 transition-all duration-300">
+              <div class="bg-white dark:bg-slate-800 px-10 py-8 rounded-3xl shadow-2xl flex flex-col items-center border border-slate-200 dark:border-slate-700 transform scale-100">
+                <div class="w-20 h-20 bg-green-50 dark:bg-green-900/30 rounded-full flex items-center justify-center mb-4 shadow-inner">
+                  <i data-lucide="check-circle-2" class="w-10 h-10 text-green-500"></i>
+                </div>
+                <h2 class="text-3xl font-extrabold mb-2 text-slate-800 dark:text-white tracking-tight">推演已完成</h2>
+                <p class="text-slate-500 dark:text-slate-400 mb-8 text-sm">所有批次行情已结算，综合报告准备就绪</p>
+                <button onclick="switchTab('report')" class="px-8 py-3.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-full font-bold shadow-xl shadow-blue-500/30 hover:shadow-blue-500/50 hover:-translate-y-0.5 active:translate-y-0 transition-all flex items-center">
+                  <i data-lucide="pie-chart" class="w-4 h-4 mr-2"></i> 前往综合分析报告
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- 底部实时数据栏 -->
+          <div class="grid grid-cols-5 gap-4 px-6 py-4 border-t border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-850/50 shrink-0 text-center">
+            <div><p class="text-[10px] text-slate-500 mb-1">当前推演日期</p><p class="text-lg font-mono font-bold text-slate-700 dark:text-slate-300" id="pb-date">----/--/--</p></div>
+            <div><p class="text-[10px] text-slate-500 mb-1">当前行情价</p><p class="text-lg font-mono font-bold" id="pb-price">¥--</p></div>
+            <div><p class="text-[10px] text-slate-500 mb-1">可用现金余额</p><p class="text-lg font-mono font-bold text-green-600 dark:text-green-400" id="pb-cash">¥--</p></div>
+            <div><p class="text-[10px] text-slate-500 mb-1">当前股票余留</p><p class="text-lg font-mono font-bold" id="pb-shares">-- 股</p></div>
+            <div><p class="text-[10px] text-slate-500 mb-1">累计网格利润</p><p class="text-lg font-mono font-bold text-blue-600 dark:text-blue-400" id="pb-profit">¥--</p></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab 3: 综合回测报告 (全新横向重构排版) -->
+      <div id="tab-report" class="tab-content">
+        
+        <!-- 核心指标顶部模块 (Top Metrics) -->
+        <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 mb-6" id="reportMetrics">
+          <!-- JS 动态生成 -->
+        </div>
+
+        <!-- 资产效率追踪与摩擦精算 (横向整齐排列) -->
+        <div class="mb-6">
+          <h3 class="font-bold text-lg mb-4 text-slate-800 dark:text-slate-200 flex items-center">
+            <i data-lucide="layout-dashboard" class="w-5 h-5 mr-2 text-indigo-500"></i> 资产效率与底层摩擦精算
+          </h3>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            
+            <!-- 卡片1：资产快照 -->
+            <div class="bg-white dark:bg-slate-800 rounded-xl p-5 border border-slate-200 dark:border-slate-700 shadow-sm transition-shadow hover:shadow-md">
+              <h4 class="text-xs font-bold text-slate-400 mb-4 uppercase tracking-wider flex items-center"><i data-lucide="wallet" class="w-3 h-3 mr-1"></i> 期末资产最终快照</h4>
+              <div class="space-y-4 text-sm">
+                <div class="flex justify-between items-center"><span class="text-slate-500">期末总资产净值</span><span class="font-mono font-bold text-lg text-slate-800 dark:text-white" id="r_finalAsset">¥0.00</span></div>
+                <div class="flex justify-between items-center pt-3 border-t border-slate-100 dark:border-slate-700/50"><span class="text-slate-500">· 可用现金金额</span><span class="font-mono font-bold text-green-600 dark:text-green-400" id="r_finalCash">¥0.00</span></div>
+                <div class="flex justify-between items-center"><span class="text-slate-500">· 股票仓位金额 (<span id="r_finalShares">0</span>股)</span><span class="font-mono font-bold text-blue-600 dark:text-blue-400" id="r_finalPosition">¥0.00</span></div>
+              </div>
+            </div>
+
+            <!-- 卡片2：盈亏与摩擦 -->
+            <div class="bg-white dark:bg-slate-800 rounded-xl p-5 border border-slate-200 dark:border-slate-700 shadow-sm transition-shadow hover:shadow-md">
+              <h4 class="text-xs font-bold text-slate-400 mb-4 uppercase tracking-wider flex items-center"><i data-lucide="scissors" class="w-3 h-3 mr-1"></i> 盈亏结构分析</h4>
+              <div class="space-y-3 text-sm">
+                <div class="flex justify-between items-center"><span class="text-slate-500">网格套利净利润</span><span class="font-mono font-bold text-blue-600 dark:text-blue-400 text-base" id="r_gridProfit">¥0.00</span></div>
+                <div class="flex justify-between items-center"><span class="text-slate-500">持仓底仓浮动盈亏</span><span class="font-mono font-bold" id="r_floatProfit">¥0.00</span></div>
+                <div class="flex justify-between items-center mt-1 pt-3 border-t border-slate-100 dark:border-slate-700/50"><span class="text-slate-500">累计交易税费总额</span><span class="font-mono font-bold text-red-500" id="r_totalFee">¥0.00</span></div>
+                <div class="flex justify-between items-center"><span class="text-slate-500">税费吃掉利润占比</span><span class="font-mono font-bold" id="r_feeRatio">0.00%</span></div>
+              </div>
+            </div>
+
+            <!-- 卡片3：网格效率 -->
+            <div class="bg-white dark:bg-slate-800 rounded-xl p-5 border border-slate-200 dark:border-slate-700 shadow-sm transition-shadow hover:shadow-md">
+              <h4 class="text-xs font-bold text-slate-400 mb-4 uppercase tracking-wider flex items-center"><i data-lucide="network" class="w-3 h-3 mr-1"></i> 批次与行为效率</h4>
+              <div class="space-y-4 text-sm">
+                <div class="flex justify-between items-center"><span class="text-slate-500">完全成对套利批次</span><span class="font-mono font-bold text-slate-800 dark:text-white" id="r_completed">0 批次</span></div>
+                <div class="flex justify-between items-center"><span class="text-slate-500">买入后未卖出 (套牢)</span><span class="font-mono font-bold text-orange-500" id="r_stranded">0 次</span></div>
+                <div class="flex justify-between items-center" title="因T+1限制导致未能第一时间止盈卖出"><span class="text-slate-500 border-b border-dashed border-slate-400 cursor-help">T+1 保护拦截数</span><span class="font-mono font-bold text-yellow-500" id="r_t1Blocks">0 次</span></div>
+                <div class="flex justify-between items-center"><span class="text-slate-500">被阻挡在交易区间外</span><span class="font-mono font-bold text-red-500" id="r_outOfBounds">0 次</span></div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- 底部全屏图表区 (空间充裕，方便滚轮放大分析) -->
+        <div class="space-y-6">
+          <!-- 回撤曲线 -->
+          <div class="bg-white dark:bg-slate-800 rounded-xl p-5 border border-slate-200 dark:border-slate-700 shadow-sm relative">
+            <div class="flex justify-between items-center mb-4">
+              <h3 class="font-bold flex items-center text-lg"><i data-lucide="activity" class="w-5 h-5 mr-2 text-red-500"></i> 动态最大回撤瀑布 (Drawdown)</h3>
+              <span class="text-xs text-slate-500 bg-slate-100 dark:bg-slate-900 px-3 py-1 rounded border border-slate-200 dark:border-slate-700">💡 指示：支持同步滚轮缩放</span>
+            </div>
+            <div class="h-48 w-full"><canvas id="drawdownChart"></canvas></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab 4: 交易流水 -->
+      <div id="tab-ledger" class="tab-content">
+        <div class="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm h-[80vh] flex flex-col">
+          <div class="px-6 py-4 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center bg-slate-50/50 dark:bg-slate-850/50">
+            <h3 class="font-bold flex items-center"><i data-lucide="list-ordered" class="w-4 h-4 mr-2 text-indigo-500"></i> 详细批次交易流水明细 (遵从T+1校验)</h3>
+            <span class="text-xs bg-slate-200 dark:bg-slate-700 px-3 py-1 rounded-full font-mono font-bold text-slate-700 dark:text-slate-300" id="ledgerCount">0 笔</span>
+          </div>
+          <div class="flex-1 overflow-y-auto">
+            <table class="w-full text-right text-sm whitespace-nowrap">
+              <thead class="bg-slate-100 dark:bg-slate-900 sticky top-0 text-slate-500 text-xs shadow-sm z-10">
+                <tr>
+                  <th class="py-3 px-4 font-medium text-left">触发时间 (行情对应)</th>
+                  <th class="py-3 px-4 font-medium text-center">交易方向</th>
+                  <th class="py-3 px-4 font-medium">执行单价</th>
+                  <th class="py-3 px-4 font-medium">成交量</th>
+                  <th class="py-3 px-4 font-medium">成交总额</th>
+                  <th class="py-3 px-4 font-medium text-red-500">单笔摩擦损耗</th>
+                  <th class="py-3 px-4 font-medium text-blue-500">该批次落袋利润</th>
+                  <th class="py-3 px-4 font-medium text-left">关联批次锚点记录</th>
+                </tr>
+              </thead>
+              <tbody id="ledgerTable" class="divide-y divide-slate-100 dark:divide-slate-800 font-mono text-[13px]">
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <script>
+    lucide.createIcons();
+
+    // ================= 全局状态与默认配置 =================
+    let state = {
+      isDark: true,
+      tasks: [],
+      currentTaskId: null,
+      
+      rawDates: [],
+      rawPrices: [],
+      csvHeaders: [],
+      csvParsed: [],
+      
+      report: null,
+      
+      // 回放控制状态
+      playbackTimer: null,
+      playbackIndex: 0,
+      playbackEndIndex: 0,
+      isPlaying: false
+    };
+
+    let equityChartObj = null;
+    let drawdownChartObj = null;
+    let playbackChartObj = null;
+
+    // 根据要求，修改默认模板为：固定30-95区间、22万总本金、500底仓，100股/格独立批次
+    const defaultTask = (id = Math.random().toString(36).substr(2, 9)) => ({
+      id,
+      name: `独立批次_回测任务_${id.substr(0,4).toUpperCase()}`,
+      symbol: "自选标的",
+      strategyMode: "classic", 
+      totalCapital: 220000, 
+      initialShares: 500,
+      basePrice: 0, // 新增初次基准价设定 (0代表自动取首日价)
+      upperBound: 95,
+      lowerBound: 30,
+      gridGap: 2, 
+      gridMode: "geometric", 
+      sharesPerGrid: 100,
+      commRate: 0.00025,
+      stampDuty: 0.0005,
+      slippage: 0.001, 
+      hasData: false
+    });
+
+    window.onload = () => {
+      if (localStorage.getItem('glp_dark') !== null) state.isDark = localStorage.getItem('glp_dark') === 'true';
+      applyTheme();
+
+      const savedData = localStorage.getItem('glp_tasks');
+      if (savedData) {
+        state.tasks = JSON.parse(savedData);
+      } else {
+        state.tasks = [defaultTask()];
+      }
+
+      renderTaskList();
+      if (state.tasks.length > 0) selectTask(state.tasks[0].id);
+
+      document.getElementById('themeToggle').addEventListener('click', () => {
+        state.isDark = !state.isDark;
+        localStorage.setItem('glp_dark', state.isDark);
+        applyTheme();
+        if(state.report) renderCharts(); 
+      });
+    };
+
+    function applyTheme() {
+      document.documentElement.classList.toggle('dark', state.isDark);
+    }
+
+    function renderTaskList() {
+      const list = document.getElementById('taskList');
+      list.innerHTML = '';
+      state.tasks.forEach(t => {
+        const isActive = t.id === state.currentTaskId;
+        const btn = document.createElement('button');
+        btn.className = `w-full text-left p-3 rounded-lg border transition-all ${isActive ? 'bg-blue-600 border-blue-600 text-white shadow-md' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:border-blue-400'}`;
+        btn.onclick = () => selectTask(t.id);
+        btn.innerHTML = `
+          <div class="font-bold text-sm mb-1 truncate">${t.name}</div>
+          <div class="flex justify-between items-center text-[10px] ${isActive ? 'text-blue-200' : 'text-slate-400'} font-mono">
+            <span>${t.hasData ? '✅ 数据已就绪' : '⚠️ 缺回测数据'}</span>
+          </div>
+        `;
+        list.appendChild(btn);
+      });
+    }
+
+    function createNewTask() {
+      const nt = defaultTask();
+      state.tasks.push(nt);
+      saveData();
+      renderTaskList();
+      selectTask(nt.id);
+    }
+
+    function selectTask(id) {
+      state.currentTaskId = id;
+      state.rawDates = []; state.rawPrices = []; state.report = null; 
+      clearInterval(state.playbackTimer); 
+      
+      const t = state.tasks.find(x => x.id === id);
+      document.getElementById('headTitle').innerText = t.name;
+      
+      renderTaskList();
+      loadConfigToForm(t);
+      updateDataStatusUI();
+      switchTab('config');
+    }
+
+    function saveData() {
+      localStorage.setItem('glp_tasks', JSON.stringify(state.tasks));
+    }
+
+    function switchTab(tabId) {
+      document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+      document.getElementById(`tab-${tabId}`).classList.add('active');
+      
+      document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.classList.remove('border-blue-600', 'text-blue-600');
+        btn.classList.add('border-transparent', 'text-slate-500');
+      });
+      const activeBtn = document.getElementById(`btn-tab-${tabId}`);
+      if(activeBtn) {
+        activeBtn.classList.remove('border-transparent', 'text-slate-500');
+        activeBtn.classList.add('border-blue-600', 'text-blue-600');
+      }
+
+      if(tabId === 'report' && state.report) setTimeout(renderCharts, 50); 
+    }
+
+    // ================= 数据导入与解析 =================
+    function handleCSVUpload(evt) {
+      const file = evt.target.files[0];
+      if (!file) return;
+      document.getElementById('uploadStatus').innerText = `解析: ${file.name}...`;
+      const reader = new FileReader();
+      reader.onload = (e) => processCSVText(e.target.result);
+      reader.readAsText(file, 'UTF-8'); 
+    }
+
+    function processCSVText(text) {
+      const lines = text.split(/\r?\n/).filter(line => line.trim() !== '');
+      if (lines.length < 2) return alert("无效的CSV");
+      
+      state.csvHeaders = lines[0].split(',').map(h => h.replace(/["']/g, '').trim());
+      state.csvParsed = lines.slice(1).map(line => line.split(',').map(c => c.replace(/["']/g, '').trim()));
+      
+      const dateSel = document.getElementById('csvDateCol');
+      const priceSel = document.getElementById('csvPriceCol');
+      const opts = state.csvHeaders.map((h, i) => `<option value="${i}">${h}</option>`).join('');
+      dateSel.innerHTML = opts; priceSel.innerHTML = opts;
+
+      let dIdx = state.csvHeaders.findIndex(h => /date|time|日期|时间/i.test(h));
+      let pIdx = state.csvHeaders.findIndex(h => /close|price|收盘|价/i.test(h));
+      if(dIdx >= 0) dateSel.value = dIdx;
+      if(pIdx >= 0) priceSel.value = pIdx;
+
+      document.getElementById('csvMappingArea').classList.remove('hidden');
+    }
+
+    function applyCSVMapping() {
+      const dIdx = document.getElementById('csvDateCol').value;
+      const pIdx = document.getElementById('csvPriceCol').value;
+      
+      let dates = [], prices = [];
+      state.csvParsed.forEach((row, i) => {
+        let p = parseFloat(row[pIdx]);
+        if (!isNaN(p)) { prices.push(p); dates.push(row[dIdx] || `t=${i}`); }
+      });
+
+      if(prices.length === 0) return alert("解析失败，无有效价格");
+
+      state.rawDates = dates;
+      state.rawPrices = prices;
+      
+      const t = state.tasks.find(x => x.id === state.currentTaskId);
+      t.hasData = true;
+      saveData();
+      renderTaskList();
+      updateDataStatusUI();
+      document.getElementById('csvMappingArea').classList.add('hidden');
+      document.getElementById('uploadStatus').innerText = `加载成功! (${prices.length}条)`;
+    }
+
+    function clearData() {
+      const t = state.tasks.find(x => x.id === state.currentTaskId);
+      
+      // 修复：如果内存为空且任务状态也是未就绪，才提示没数据可清空
+      if (state.rawPrices.length === 0 && state.csvParsed.length === 0 && (!t || !t.hasData)) {
+        alert("当前没有可清空的数据！");
+        return;
+      }
+      
+      if (!confirm("确定要彻底清空当前任务关联的所有数据和生成的回测报告吗？")) return;
+      
+      // 1. 强行终止动画，清空内存数据
+      clearInterval(state.playbackTimer);
+      state.isPlaying = false;
+      state.rawDates = [];
+      state.rawPrices = [];
+      state.csvHeaders = [];
+      state.csvParsed = [];
+      state.report = null;
+      
+      // 2. 更新任务状态，消掉绿色对号
+      if (t) {
+        t.hasData = false;
+        saveData();
+      }
+      
+      // 3. 重置上传组件
+      const fileInput = document.getElementById('csvFileInput');
+      if (fileInput) fileInput.value = '';
+      
+      // 4. 恢复各种 UI 文字状态
+      document.getElementById('uploadStatus').innerText = "支持各种周期行情数据";
+      document.getElementById('csvMappingArea').classList.add('hidden');
+      document.getElementById('headSubInfo').innerText = "标的: -- | 数据跨度: --";
+      
+      // 5. 销毁图表，防止切换后重绘残影
+      if(equityChartObj) { equityChartObj.destroy(); equityChartObj = null; }
+      if(drawdownChartObj) { drawdownChartObj.destroy(); drawdownChartObj = null; }
+      if(playbackChartObj) { playbackChartObj.destroy(); playbackChartObj = null; }
+      
+      // 6. 清空旧报告与流水数据
+      document.getElementById('reportMetrics').innerHTML = '';
+      document.getElementById('ledgerTable').innerHTML = '';
+      document.getElementById('ledgerCount').innerText = '0 笔';
+      
+      renderTaskList();
+      updateDataStatusUI();
+    }
+
+    function loadMockData() {
+      let dates = [], prices = [];
+      let p = 50.0; 
+      let d = new Date(2020, 0, 1);
+      
+      for(let i=0; i<1500; i++) {
+        dates.push(d.toISOString().split('T')[0]);
+        let drift = Math.sin(i / 100) * 0.5; 
+        let noise = (Math.random() - 0.5) * 2.5;
+        p = p + drift + noise;
+        if(p < 20) p = 20; 
+        if(p > 110) p = 110; 
+        prices.push(parseFloat(p.toFixed(2)));
+        
+        d.setDate(d.getDate() + 1);
+        if(d.getDay() === 6) d.setDate(d.getDate() + 2); 
+      }
+
+      state.rawDates = dates;
+      state.rawPrices = prices;
+      
+      const t = state.tasks.find(x => x.id === state.currentTaskId);
+      t.hasData = true;
+      loadConfigToForm(t); 
+      saveData();
+      renderTaskList();
+      updateDataStatusUI();
+    }
+
+    function updateDataStatusUI() {
+      const badge = document.getElementById('dataReadyBadge');
+      if (state.rawPrices.length > 0) {
+        badge.innerText = "数据已就绪";
+        badge.className = "px-2 py-1 bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 text-xs rounded border border-green-200 dark:border-green-800";
+        document.getElementById('infoDataLen').innerText = state.rawPrices.length + " 条";
+        document.getElementById('infoDataStart').innerText = state.rawDates[0];
+        document.getElementById('infoDataEnd').innerText = state.rawDates[state.rawDates.length-1];
+        document.getElementById('infoPriceStart').innerText = `¥${state.rawPrices[0]}`;
+        document.getElementById('headSubInfo').innerText = `测试序列 | ${state.rawDates[0]} 至 ${state.rawDates[state.rawDates.length-1]}`;
+      } else {
+        badge.innerText = "等待数据导入";
+        badge.className = "px-2 py-1 bg-slate-200 dark:bg-slate-700 text-slate-500 text-xs rounded";
+        document.getElementById('infoDataLen').innerText = "0";
+        document.getElementById('infoDataStart').innerText = "--";
+        document.getElementById('infoDataEnd').innerText = "--";
+        document.getElementById('infoPriceStart').innerText = "--";
+      }
+    }
+
+    function loadConfigToForm(t) {
+      document.getElementById('p_strategyMode').value = t.strategyMode || 'classic';
+      document.getElementById('p_totalCapital').value = t.totalCapital;
+      document.getElementById('p_shares').value = t.initialShares;
+      document.getElementById('p_basePrice').value = t.basePrice || '';
+      document.getElementById('p_upper').value = t.upperBound;
+      document.getElementById('p_lower').value = t.lowerBound;
+      document.getElementById('p_gridGap').value = t.gridGap;
+      document.getElementById('p_gridMode').value = t.gridMode;
+      document.getElementById('p_sharesPerGrid').value = t.sharesPerGrid;
+      document.getElementById('p_commRate').value = t.commRate;
+      document.getElementById('p_stampDuty').value = t.stampDuty;
+      document.getElementById('p_slippage').value = t.slippage;
+    }
+
+    function saveConfig() {
+      const t = state.tasks.find(x => x.id === state.currentTaskId);
+      t.strategyMode = document.getElementById('p_strategyMode').value;
+      t.totalCapital = Number(document.getElementById('p_totalCapital').value);
+      t.initialShares = Number(document.getElementById('p_shares').value);
+      t.basePrice = Number(document.getElementById('p_basePrice').value) || 0;
+      t.upperBound = Number(document.getElementById('p_upper').value);
+      t.lowerBound = Number(document.getElementById('p_lower').value);
+      t.gridGap = Number(document.getElementById('p_gridGap').value);
+      t.gridMode = document.getElementById('p_gridMode').value;
+      t.sharesPerGrid = Number(document.getElementById('p_sharesPerGrid').value);
+      t.commRate = Number(document.getElementById('p_commRate').value);
+      t.stampDuty = Number(document.getElementById('p_stampDuty').value);
+      t.slippage = Number(document.getElementById('p_slippage').value);
+      saveData();
+
+      const btn = document.getElementById('btn-save-config');
+      const originalText = '保存配置';
+      btn.innerHTML = `<i data-lucide="check" class="w-3 h-3 mr-1"></i> 已保存`;
+      btn.classList.add('bg-green-100', 'text-green-600', 'border-green-300', 'dark:bg-green-900/50', 'dark:text-green-400');
+      btn.classList.remove('bg-indigo-50', 'text-indigo-600', 'border-indigo-200');
+      lucide.createIcons();
+      
+      setTimeout(() => {
+        btn.innerHTML = originalText;
+        btn.classList.remove('bg-green-100', 'text-green-600', 'border-green-300', 'dark:bg-green-900/50', 'dark:text-green-400');
+        btn.classList.add('bg-indigo-50', 'text-indigo-600', 'border-indigo-200');
+      }, 1500);
+    }
+
+    // 辅助函数：将任意格式转为 YYYY-MM-DD 用于赋值给 input
+    function toISODate(dateStr) {
+      let d = new Date(dateStr);
+      if(isNaN(d.getTime())) return '';
+      let m = (d.getMonth() + 1).toString().padStart(2, '0');
+      let day = d.getDate().toString().padStart(2, '0');
+      return `${d.getFullYear()}-${m}-${day}`;
+    }
+
+    // 辅助函数：提取绝对的“自然日”时间戳 (清除时分秒干扰)，用于精准判断 T+1
+    function getDayStartMs(dateStr) {
+      let d = new Date(dateStr);
+      if(isNaN(d.getTime())) return 0;
+      return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+    }
+
+    // ================= 量化回测核心引擎 (支持 T+1 拦截标记) =================
+    function runBacktest() {
+      if (state.rawPrices.length === 0) return alert("请先在左侧配置区导入数据或载入模拟数据！");
+      saveConfig(); 
+      
+      const t = state.tasks.find(x => x.id === state.currentTaskId);
+      const prices = state.rawPrices;
+      const dates = state.rawDates;
+      
+      let startPrice = t.basePrice > 0 ? t.basePrice : prices[0];
+      let totalShares = t.initialShares;
+      
+      let cash = t.totalCapital - (totalShares * startPrice);
+      if (cash < 0) {
+        alert(`严重警告：您的投入总本金不足以在期初按基准价买入 ${t.initialShares} 股底仓！`);
+        return;
+      }
+
+      // 安全地给原生日期控件赋值
+      document.getElementById('pb-start-date').value = toISODate(dates[0]);
+      document.getElementById('pb-end-date').value = toISODate(dates[dates.length - 1]);
+
+      const getTargetSell = (buyP) => t.gridMode === 'arithmetic' ? buyP + t.gridGap : buyP * (1 + t.gridGap/100);
+      const getTargetBuy = (anchorP) => t.gridMode === 'arithmetic' ? anchorP - t.gridGap : anchorP * (1 - t.gridGap/100);
+
+      let lots = [];
+      let numLots = Math.floor(totalShares / t.sharesPerGrid);
+      let remainder = totalShares % t.sharesPerGrid;
+      
+      let ancientDateMs = 0; // 用时间戳 0 代替原始底仓时间，绝对早于任何数据
+
+      for(let i=0; i<numLots; i++) {
+        lots.push({ buyPrice: startPrice, targetSell: getTargetSell(startPrice), shares: t.sharesPerGrid, date: ancientDateMs, t1Blocked: false });
+      }
+      if (remainder > 0) {
+        lots.push({ buyPrice: startPrice, targetSell: getTargetSell(startPrice), shares: remainder, date: ancientDateMs, t1Blocked: false });
+      }
+
+      let ledger = [];
+      let equityCurve = [];
+      let drawdownCurve = [];
+      let executionHistory = []; 
+      let peakEquity = 0;
+      
+      let outOfBoundsCount = 0;
+      let strandedCount = 0;
+      let totalFee = 0;
+      let gridProfit = 0;
+      let pairsCompleted = 0;
+      
+      let t1BlockCount = 0;
+      let t1Events = []; 
+
+      let dynamicUpper = t.upperBound;
+      let dynamicLower = t.lowerBound;
+      let isTradingStopped = false;
+
+      const executeTrade = (action, price, shares, costBasis, dtStr, stepIdx, relatedLots = [], isDelayedSell = false) => {
+        let turnover = price * shares;
+        let comm = turnover * t.commRate;
+        let stamp = action === 'SELL' ? turnover * t.stampDuty : 0;
+        let slip = price * t.slippage * shares; 
+        let fee = comm + stamp + slip;
+        totalFee += fee;
+
+        let realized = 0;
+        if(action === 'BUY') {
+          cash -= (turnover + fee);
+          totalShares += shares;
+        } else {
+          cash += (turnover - fee);
+          totalShares -= shares;
+          realized = turnover - fee - costBasis;
+          gridProfit += realized;
+          pairsCompleted += relatedLots.length;
+        }
+        
+        let lotInfo = action === 'BUY' ? `新建锚点: ¥${price.toFixed(2)}` : `覆盖 ${relatedLots.length} 批次`;
+        ledger.push({ step: stepIdx, time: dtStr, action, price, shares, turnover, fee, realized, layer: lotInfo, isDelayedSell });
+      };
+
+      for(let step = 0; step < prices.length; step++) {
+        let currentP = prices[step];
+        let dt = dates[step];
+        let currentDayMs = getDayStartMs(dt); // 当天凌晨的绝对时间戳
+
+        let currentEquity = cash + (totalShares * currentP);
+        equityCurve.push(currentEquity);
+        
+        if (currentEquity > peakEquity) peakEquity = currentEquity;
+        let dd = peakEquity > 0 ? ((peakEquity - currentEquity) / peakEquity) * 100 : 0;
+        drawdownCurve.push(parseFloat(dd.toFixed(2)));
+
+        if (step > 0) {
+          if (isTradingStopped) {
+            executionHistory.push({ cash, totalShares, gridProfit });
+            continue;
+          }
+
+          if (t.strategyMode === 'trailing' && currentP > dynamicUpper) {
+            let shift = currentP - dynamicUpper;
+            dynamicUpper += shift;
+            dynamicLower += shift;
+          }
+
+          let inRange = currentP >= dynamicLower && currentP <= dynamicUpper;
+          if (!inRange) outOfBoundsCount++;
+
+          let actionTaken = false;
+          let t1TriggeredThisStep = false;
+
+          // ======= 1. 扫描并执行 SELL =======
+          let sellLots = [];
+          let keepLots = [];
+          for (let l of lots) {
+            if (currentP >= l.targetSell) {
+              // 精准的时间戳绝对比较，规避所有字符串缺陷
+              if (currentDayMs > l.date) {
+                sellLots.push(l);
+              } else {
+                if (!l.t1Blocked) {
+                  l.t1Blocked = true;
+                  t1BlockCount++;
+                  t1TriggeredThisStep = true;
+                }
+                keepLots.push(l);
+              }
+            } else {
+              keepLots.push(l);
+            }
+          }
+          lots = keepLots;
+
+          if (t1TriggeredThisStep) {
+            t1Events.push({ step, price: currentP });
+          }
+
+          if (sellLots.length > 0) {
+            let sharesToSell = sellLots.reduce((s, l) => s + l.shares, 0);
+            let cost = sellLots.reduce((c, l) => c + l.buyPrice * l.shares, 0);
+            let isDelayedSell = sellLots.some(l => l.t1Blocked); 
+            executeTrade('SELL', currentP, sharesToSell, cost, dt, step, sellLots, isDelayedSell);
+            actionTaken = true;
+
+            if (t.strategyMode === 'conservative' && totalShares === 0) {
+              isTradingStopped = true;
+            }
+          }
+
+          // ======= 2. 扫描并执行 BUY =======
+          if (inRange && !isTradingStopped) {
+            let isZeroPosition = (totalShares === 0);
+            let requiredCash = currentP * t.sharesPerGrid;
+            let estimatedFee = requiredCash * (t.commRate + t.slippage);
+            let totalCost = requiredCash + estimatedFee;
+
+            if (isZeroPosition) {
+              if (cash >= totalCost) {
+                executeTrade('BUY', currentP, t.sharesPerGrid, 0, dt, step);
+                lots.push({ buyPrice: currentP, targetSell: getTargetSell(currentP), shares: t.sharesPerGrid, date: currentDayMs, t1Blocked: false });
+              } else {
+                strandedCount++; 
+              }
+            } 
+            else if (!actionTaken) {
+              let lowestBuyPrice = Math.min(...lots.map(l => l.buyPrice));
+              let targetBuyLevel = getTargetBuy(lowestBuyPrice);
+              
+              if (currentP <= targetBuyLevel) {
+                if (cash >= totalCost) {
+                  executeTrade('BUY', currentP, t.sharesPerGrid, 0, dt, step);
+                  lots.push({ buyPrice: currentP, targetSell: getTargetSell(currentP), shares: t.sharesPerGrid, date: currentDayMs, t1Blocked: false });
+                } else {
+                  strandedCount++; 
+                }
+              }
+            }
+          }
+        }
+        
+        executionHistory.push({ cash, totalShares, gridProfit });
+      }
+
+      let initialAsset = t.totalCapital; 
+      let finalAsset = equityCurve[equityCurve.length - 1];
+      let totalReturn = (finalAsset - initialAsset) / initialAsset;
+      let maxDrawdown = Math.max(...drawdownCurve);
+      
+      let years = 1;
+      if (dates.length > 1) {
+        let startTime = new Date(dates[0]).getTime();
+        let endTime = new Date(dates[dates.length - 1]).getTime();
+        if (!isNaN(startTime) && !isNaN(endTime) && endTime > startTime) {
+          years = (endTime - startTime) / (1000 * 60 * 60 * 24 * 365.25);
+        } else {
+          years = prices.length / 252; 
+        }
+      }
+      if (years <= 0.01) years = 0.01; 
+      
+      let annualizedReturn = (Math.pow(1 + totalReturn, 1/years) - 1) * 100;
+      if (years < 0.1) annualizedReturn = totalReturn * 100; 
+      
+      let dailyReturns = [];
+      for(let i=1; i<equityCurve.length; i++) dailyReturns.push((equityCurve[i]-equityCurve[i-1])/equityCurve[i-1]);
+      let meanDR = dailyReturns.reduce((a,b)=>a+b,0)/dailyReturns.length;
+      let stdDR = Math.sqrt(dailyReturns.reduce((sq, n)=>sq + Math.pow(n - meanDR, 2), 0) / dailyReturns.length);
+      
+      let barsPerYear = prices.length / years;
+      let sharpe = stdDR === 0 ? 0 : (meanDR - 0.02/barsPerYear) / stdDR * Math.sqrt(barsPerYear);
+
+      let floatProfit = (finalAsset - initialAsset) - gridProfit;
+      
+      let finalCash = cash;
+      let finalShares = totalShares;
+      let finalPositionValue = totalShares * prices[prices.length - 1];
+
+      state.report = {
+        equityCurve, drawdownCurve, dates, ledger, history: executionHistory,
+        initialAsset, finalAsset, finalCash, finalShares, finalPositionValue,
+        totalReturn: totalReturn * 100,
+        annualizedReturn, maxDrawdown, sharpe,
+        pairsCompleted, strandedCount, outOfBoundsCount,
+        t1BlockCount, t1Events,
+        gridProfit, floatProfit, totalFee, lots
+      };
+
+      renderReportUI();
+      renderLedger();
+      initPlayback();
+      switchTab('playback');
+    }
+
+    // ================= 动态回放核心逻辑 =================
+    // Chart.js 自定义插件：用于在图表上绘制 T 和 O 标记
+    const textMarkerPlugin = {
+      id: 'textMarkerPlugin',
+      afterDatasetsDraw(chart) {
+        const ctx = chart.ctx;
+        chart.data.datasets.forEach((dataset, i) => {
+          if (dataset.label === 'T1拦截' || dataset.label === '延迟卖出') {
+            const meta = chart.getDatasetMeta(i);
+            meta.data.forEach((point, index) => {
+              if (dataset.data[index] !== null && dataset.data[index] !== undefined) {
+                ctx.fillStyle = dataset.label === 'T1拦截' ? '#f59e0b' : '#3b82f6';
+                ctx.font = 'bold 12px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'bottom';
+                let offset = dataset.label === 'T1拦截' ? 12 : 24; 
+                ctx.fillText(dataset.label === 'T1拦截' ? 'T' : 'O', point.x, point.y - offset);
+              }
+            });
+          }
+        });
+      }
+    };
+
+    function initPlayback() {
+      if (!state.report) {
+        alert("请先点击【开始回测】生成推演数据！");
+        return;
+      }
+
+      clearInterval(state.playbackTimer);
+      state.isPlaying = true;
+      document.getElementById('btn-pb-toggle').innerText = '暂停';
+      document.getElementById('btn-pb-toggle').className = `text-sm px-4 py-1.5 rounded hover:opacity-90 transition font-bold w-24 bg-slate-800 dark:bg-slate-700 text-white`;
+      document.getElementById('pb-finish-overlay').classList.add('hidden');
+
+      const themeColor = state.isDark ? '#cbd5e1' : '#475569';
+      const gridColor = state.isDark ? 'rgba(51, 65, 85, 0.5)' : 'rgba(226, 232, 240, 0.8)';
+
+      let startVal = document.getElementById('pb-start-date').value;
+      let endVal = document.getElementById('pb-end-date').value;
+
+      // 使用安全时间戳对比规避截断，且增加容错保护
+      state.playbackIndex = 0;
+      state.playbackEndIndex = state.report.dates.length - 1;
+
+      if (startVal) {
+          let startMs = new Date(startVal + 'T00:00:00').getTime();
+          let idx = state.report.dates.findIndex(d => new Date(d).getTime() >= startMs);
+          if (idx !== -1) state.playbackIndex = idx;
+      }
+      if (endVal) {
+          let endMs = new Date(endVal + 'T23:59:59').getTime();
+          let idx = state.report.dates.findIndex(d => new Date(d).getTime() > endMs);
+          if (idx !== -1) state.playbackEndIndex = idx - 1;
+      }
+      
+      // 终极防死循环保护
+      if (state.playbackEndIndex < state.playbackIndex || state.playbackEndIndex < 0) {
+          state.playbackIndex = 0;
+          state.playbackEndIndex = state.report.dates.length - 1;
+      }
+
+      if(playbackChartObj) playbackChartObj.destroy();
+      const ctx = document.getElementById('playbackChart').getContext('2d');
+      
+      playbackChartObj = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: [],
+          datasets: [
+            { label: '收盘价', data: [], borderColor: state.isDark ? '#94a3b8' : '#64748b', borderWidth: 1.5, pointRadius: 0, tension: 0.1 },
+            { label: '触发买入', data: [], showLine: false, pointStyle: 'triangle', pointRadius: 6, backgroundColor: '#22c55e', borderColor: '#166534' },
+            { label: '触发卖出', data: [], showLine: false, pointStyle: 'triangle', rotation: 180, pointRadius: 6, backgroundColor: '#ef4444', borderColor: '#991b1b' },
+            { label: 'T1拦截', data: [], showLine: false, pointRadius: 0 },
+            { label: '延迟卖出', data: [], showLine: false, pointRadius: 0 }
+          ]
+        },
+        plugins: [textMarkerPlugin], 
+        options: {
+          responsive: true, maintainAspectRatio: false, 
+          animation: false, 
+          interaction: { mode: 'index', intersect: false },
+          plugins: { 
+            legend: { display: false }, 
+            tooltip: { enabled: true },
+            zoom: {
+              pan: { enabled: true, mode: 'x' },
+              zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'x' }
+            }
+          },
+          scales: { 
+            x: { 
+              display: true, 
+              ticks: { 
+                maxTicksLimit: 12, 
+                color: themeColor,
+                font: { size: 10 },
+                callback: function(value, index) {
+                  let labels = playbackChartObj.data.labels;
+                  let current = labels[index];
+                  if (!current) return '';
+                  let prev = index > 0 ? labels[index - 1] : null;
+
+                  let curD = new Date(current);
+                  if (isNaN(curD.getTime())) return current;
+
+                  let y = curD.getFullYear();
+                  let m = curD.getMonth() + 1;
+                  let d = curD.getDate();
+                  let H = curD.getHours().toString().padStart(2, '0');
+                  let M = curD.getMinutes().toString().padStart(2, '0');
+
+                  if (!prev) return `${m}月${d}日`; 
+
+                  let prevD = new Date(prev);
+                  if (y !== prevD.getFullYear()) return `${y}年`;
+                  if (m !== prevD.getMonth() + 1) return `${m}月`;
+                  if (d !== prevD.getDate()) return `${d}日`;
+
+                  if (current.includes(':')) return `${H}:${M}`;
+                  return ''; 
+                }
+              }, 
+              grid: { display: false } 
+            },
+            y: { grid: { color: gridColor }, ticks: { color: themeColor } } 
+          }
+        }
+      });
+
+      state.playbackTimer = setInterval(playbackTick, 30);
+    }
+
+    function playbackTick() {
+      if(!state.isPlaying) return;
+      const r = state.report;
+      const speedRaw = document.getElementById('pb-speed').value;
+      const batchSize = parseInt(speedRaw);
+
+      for(let i=0; i<batchSize; i++) {
+        let idx = state.playbackIndex;
+        if(idx > state.playbackEndIndex || idx >= r.dates.length) {
+          finishPlayback();
+          return;
+        }
+
+        playbackChartObj.data.labels.push(r.dates[idx]);
+        playbackChartObj.data.datasets[0].data.push(state.rawPrices[idx]);
+
+        let events = r.ledger.filter(l => l.step === idx);
+        let buyPoint = null, sellPoint = null, oPoint = null;
+        events.forEach(e => {
+          if(e.action === 'BUY') buyPoint = state.rawPrices[idx];
+          if(e.action === 'SELL') {
+             sellPoint = state.rawPrices[idx];
+             if (e.isDelayedSell) oPoint = state.rawPrices[idx];
+          }
+        });
+        
+        let t1Point = null;
+        if (r.t1Events.some(e => e.step === idx)) {
+          t1Point = state.rawPrices[idx];
+        }
+
+        playbackChartObj.data.datasets[1].data.push(buyPoint);
+        playbackChartObj.data.datasets[2].data.push(sellPoint);
+        playbackChartObj.data.datasets[3].data.push(t1Point);
+        playbackChartObj.data.datasets[4].data.push(oPoint);
+
+        let h = r.history[idx];
+        document.getElementById('pb-date').innerText = r.dates[idx];
+        document.getElementById('pb-price').innerText = `¥${state.rawPrices[idx].toFixed(2)}`;
+        document.getElementById('pb-shares').innerText = `${h.totalShares} 股`;
+        document.getElementById('pb-cash').innerText = `¥${h.cash.toLocaleString('zh-CN', {maximumFractionDigits:2})}`;
+        document.getElementById('pb-profit').innerText = `¥${h.gridProfit.toLocaleString('zh-CN', {maximumFractionDigits:2})}`;
+
+        state.playbackIndex++;
+      }
+      playbackChartObj.update();
+    }
+
+    function togglePlayback() {
+      state.isPlaying = !state.isPlaying;
+      document.getElementById('btn-pb-toggle').innerText = state.isPlaying ? '暂停' : '继续播放';
+      document.getElementById('btn-pb-toggle').className = `text-sm px-4 py-1.5 rounded hover:opacity-90 transition font-bold w-24 ${state.isPlaying ? 'bg-slate-800 dark:bg-slate-700 text-white' : 'bg-blue-600 text-white shadow-md shadow-blue-500/20'}`;
+    }
+
+    function finishPlayback() {
+      clearInterval(state.playbackTimer);
+      state.isPlaying = false;
+      const overlay = document.getElementById('pb-finish-overlay');
+      overlay.classList.remove('hidden');
+      lucide.createIcons();
+      
+      setTimeout(() => {
+        overlay.classList.add('hidden');
+      }, 5000);
+    }
+
+    function skipPlayback() {
+      clearInterval(state.playbackTimer);
+      state.isPlaying = false;
+      switchTab('report');
+    }
+
+    // ================= 综合报告与 UI 渲染 =================
+    function renderReportUI() {
+      const r = state.report;
+      if(!r) return;
+
+      document.getElementById('reportMetrics').innerHTML = `
+        <div class="bg-white dark:bg-slate-800 rounded-xl p-4 border border-slate-200 dark:border-slate-700">
+          <p class="text-[10px] text-slate-500 mb-1">期初投入总本金</p>
+          <p class="text-xl font-mono font-bold text-slate-700 dark:text-slate-300">¥${r.initialAsset.toLocaleString('zh-CN', {maximumFractionDigits:0})}</p>
+        </div>
+        <div class="bg-white dark:bg-slate-800 rounded-xl p-4 border border-slate-200 dark:border-slate-700">
+          <p class="text-[10px] text-slate-500 mb-1">累计绝对收益率</p>
+          <p class="text-xl font-mono font-bold ${r.totalReturn>=0?'text-red-500':'text-green-500'}">${r.totalReturn>=0?'+':''}${r.totalReturn.toFixed(2)}%</p>
+        </div>
+        <div class="bg-white dark:bg-slate-800 rounded-xl p-4 border border-slate-200 dark:border-slate-700 border-b-4 border-b-blue-500 shadow-sm relative overflow-hidden">
+          <div class="absolute -right-2 -bottom-2 opacity-10"><i data-lucide="award" class="w-12 h-12"></i></div>
+          <p class="text-[10px] text-slate-500 mb-1">年化收益 (CAGR)</p>
+          <p class="text-xl font-mono font-bold ${r.annualizedReturn>=0?'text-red-500':'text-green-500'}">${r.annualizedReturn.toFixed(2)}%</p>
+        </div>
+        <div class="bg-white dark:bg-slate-800 rounded-xl p-4 border border-slate-200 dark:border-slate-700 border-b-4 border-b-green-500 shadow-sm">
+          <p class="text-[10px] text-slate-500 mb-1">最大回撤 (MDD)</p>
+          <p class="text-xl font-mono font-bold text-green-500">-${r.maxDrawdown.toFixed(2)}%</p>
+        </div>
+        <div class="bg-white dark:bg-slate-800 rounded-xl p-4 border border-slate-200 dark:border-slate-700">
+          <p class="text-[10px] text-slate-500 mb-1">夏普比率 (Sharpe)</p>
+          <p class="text-xl font-mono font-bold text-slate-800 dark:text-slate-200">${r.sharpe.toFixed(2)}</p>
+        </div>
+        <div class="bg-white dark:bg-slate-800 rounded-xl p-4 border border-slate-200 dark:border-slate-700">
+          <p class="text-[10px] text-slate-500 mb-1">触发总交易笔数</p>
+          <p class="text-xl font-mono font-bold text-indigo-500">${r.ledger.length} 笔</p>
+        </div>
+      `;
+      lucide.createIcons();
+
+      document.getElementById('r_finalAsset').innerText = `¥${r.finalAsset.toLocaleString('zh-CN', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
+      document.getElementById('r_finalCash').innerText = `¥${r.finalCash.toLocaleString('zh-CN', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
+      document.getElementById('r_finalShares').innerText = r.finalShares;
+      document.getElementById('r_finalPosition').innerText = `¥${r.finalPositionValue.toLocaleString('zh-CN', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
+
+      document.getElementById('r_gridProfit').innerText = `+¥${r.gridProfit.toLocaleString('zh-CN', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
+      
+      let floatSign = r.floatProfit >= 0 ? '+' : '';
+      let floatColor = r.floatProfit >= 0 ? 'text-red-500' : 'text-green-500';
+      document.getElementById('r_floatProfit').innerText = `${floatSign}¥${r.floatProfit.toLocaleString('zh-CN', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
+      document.getElementById('r_floatProfit').className = `font-mono font-bold ${floatColor}`;
+
+      document.getElementById('r_totalFee').innerText = `¥${r.totalFee.toLocaleString('zh-CN', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
+      let feeRatio = r.gridProfit > 0 ? (r.totalFee / r.gridProfit) * 100 : 0;
+      document.getElementById('r_feeRatio').innerText = `${feeRatio.toFixed(2)}%`;
+
+      document.getElementById('r_completed').innerText = `${r.pairsCompleted} 批次`;
+      document.getElementById('r_stranded').innerText = `${r.strandedCount} 次`;
+      document.getElementById('r_t1Blocks').innerText = `${r.t1BlockCount} 次`;
+      document.getElementById('r_outOfBounds').innerText = `${r.outOfBoundsCount} 次`;
+    }
+
+    function renderCharts() {
+      const r = state.report;
+      if(!r) return;
+
+      const themeColor = state.isDark ? '#cbd5e1' : '#475569';
+      const gridColor = state.isDark ? 'rgba(51, 65, 85, 0.5)' : 'rgba(226, 232, 240, 0.8)';
+
+      if(drawdownChartObj) drawdownChartObj.destroy();
+      const ddCtx = document.getElementById('drawdownChart').getContext('2d');
+      drawdownChartObj = new Chart(ddCtx, {
+        type: 'line',
+        data: { 
+          labels: r.dates, 
+          datasets: [{ 
+            label: '动态回撤 %', data: r.drawdownCurve, 
+            borderColor: '#ef4444', backgroundColor: 'rgba(239, 68, 68, 0.3)', 
+            borderWidth: 1, pointRadius: 0, fill: true, stepped: true 
+          }] 
+        },
+        options: { 
+          responsive: true, maintainAspectRatio: false, 
+          plugins: { 
+            legend: { display: false },
+            zoom: {
+              pan: { enabled: true, mode: 'x' },
+              zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'x' }
+            }
+          }, 
+          scales: { 
+            x: { display: false }, 
+            y: { reverse: true, grid: { color: gridColor }, ticks: { callback: v => v+'%', color: themeColor, stepSize: Math.max(5, Math.ceil(r.maxDrawdown/4)) }, min: 0 } 
+          } 
+        }
+      });
+    }
+
+    function renderLedger() {
+      const r = state.report;
+      if(!r) return;
+      
+      let html = '';
+      r.ledger.forEach(l => {
+        let isBuy = l.action === 'BUY';
+        // 如果这笔卖出订单中包含了曾经被T+1限制过的批次，那么显示显眼的 [O] 标识
+        let layerHtml = l.isDelayedSell ? `<span class="text-blue-500 font-bold mr-1" title="摆脱T+1后的延迟卖出">[O]</span>${l.layer}` : l.layer;
+        
+        html += `<tr class="hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-colors">
+            <td class="py-3 px-4 text-left text-slate-500">${l.time}</td>
+            <td class="py-3 px-4 text-center font-bold ${isBuy?'text-green-500':'text-red-500'}">${isBuy?'买入':'卖出'}</td>
+            <td class="py-3 px-4 font-bold dark:text-slate-200">¥${l.price.toFixed(2)}</td>
+            <td class="py-3 px-4 text-slate-500">${l.shares}</td>
+            <td class="py-3 px-4 text-slate-500">¥${l.turnover.toLocaleString('zh-CN', {maximumFractionDigits:0})}</td>
+            <td class="py-3 px-4 text-slate-400 text-[11px]">¥${l.fee.toFixed(2)}</td>
+            <td class="py-3 px-4 font-bold ${l.realized>0?'text-blue-500':'text-slate-300'}">${l.realized>0?'+¥'+l.realized.toFixed(2):'--'}</td>
+            <td class="py-3 px-4 text-left text-xs text-slate-400">${layerHtml}</td>
+          </tr>`;
+      });
+      document.getElementById('ledgerTable').innerHTML = html;
+      document.getElementById('ledgerCount').innerText = `${r.ledger.length} 笔交易`;
+    }
+
+  </script>
+</body>
+</html>
