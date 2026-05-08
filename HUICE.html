@@ -45,7 +45,7 @@
         <i data-lucide="bar-chart-2" class="text-blue-600 dark:text-blue-400"></i>
         <div>
           <h1 class="font-bold text-lg leading-tight tracking-tight">GridLab <span class="text-blue-500">Pro</span></h1>
-          <p class="text-[10px] text-slate-400 font-mono">Backtest Engine v5.0</p>
+          <p class="text-[10px] text-slate-400 font-mono">Backtest Engine v6.0</p>
         </div>
       </div>
       <button id="themeToggle" class="p-1.5 rounded-md hover:bg-slate-100 dark:hover:bg-slate-700 transition">
@@ -95,6 +95,9 @@
         </button>
         <button id="btn-tab-report" onclick="switchTab('report')" class="tab-btn pb-3 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 transition-all flex items-center">
           <i data-lucide="pie-chart" class="w-4 h-4 mr-1"></i> 综合回测报告
+        </button>
+        <button id="btn-tab-evaluation" onclick="switchTab('evaluation')" class="tab-btn pb-3 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 transition-all flex items-center">
+          <i data-lucide="brain-circuit" class="w-4 h-4 mr-1"></i> 智能评测与建议
         </button>
         <button id="btn-tab-ledger" onclick="switchTab('ledger')" class="tab-btn pb-3 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 transition-all flex items-center">
           <i data-lucide="list" class="w-4 h-4 mr-1"></i> 交易流水详情
@@ -282,6 +285,44 @@
           <!-- JS 动态生成 -->
         </div>
 
+        <!-- 极值点追踪模块 (极端行情压力测试) -->
+        <div class="mb-6">
+          <h3 class="font-bold text-lg mb-4 text-slate-800 dark:text-slate-200 flex items-center">
+            <i data-lucide="alert-triangle" class="w-5 h-5 mr-2 text-indigo-500"></i> 极端行情压力测试 (极值点追踪)
+          </h3>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            
+            <!-- 最大回撤极值点 -->
+            <div class="bg-red-50/50 dark:bg-red-900/10 rounded-xl p-5 border border-red-100 dark:border-red-900/30 shadow-sm relative overflow-hidden">
+              <div class="absolute -right-4 -bottom-4 opacity-5"><i data-lucide="trending-down" class="w-32 h-32 text-red-500"></i></div>
+              <h4 class="text-sm font-bold text-red-600 dark:text-red-400 mb-4 flex items-center"><i data-lucide="shield-alert" class="w-4 h-4 mr-1"></i> 最大回撤发生时刻 (最黑暗的一天)</h4>
+              <div class="space-y-3 relative z-10 text-sm">
+                <div class="flex justify-between items-center"><span class="text-slate-500">发生时间点</span><span class="font-mono font-bold text-slate-800 dark:text-white" id="ext_dd_date">--</span></div>
+                <div class="flex justify-between items-center"><span class="text-slate-500">当日最大回撤率</span><span class="font-mono font-bold text-red-500" id="ext_dd_val">--%</span></div>
+                <div class="h-px bg-red-100 dark:bg-red-900/30 my-2"></div>
+                <div class="flex justify-between items-center"><span class="text-slate-500">此时网格已赚利润</span><span class="font-mono font-bold text-blue-600 dark:text-blue-400" id="ext_dd_gridProfit">--</span></div>
+                <div class="flex justify-between items-center"><span class="text-slate-500">此时股票持仓浮亏</span><span class="font-mono font-bold text-red-500" id="ext_dd_floatProfit">--</span></div>
+                <div class="flex justify-between items-center pt-2"><span class="text-slate-500 text-xs">当日总资产净值</span><span class="font-mono font-bold" id="ext_dd_equity">--</span></div>
+              </div>
+            </div>
+
+            <!-- 最大盈利极值点 -->
+            <div class="bg-blue-50/50 dark:bg-blue-900/10 rounded-xl p-5 border border-blue-100 dark:border-blue-900/30 shadow-sm relative overflow-hidden">
+              <div class="absolute -right-4 -bottom-4 opacity-5"><i data-lucide="trending-up" class="w-32 h-32 text-blue-500"></i></div>
+              <h4 class="text-sm font-bold text-blue-600 dark:text-blue-400 mb-4 flex items-center"><i data-lucide="crown" class="w-4 h-4 mr-1"></i> 最大总盈利发生时刻 (最高光的一天)</h4>
+              <div class="space-y-3 relative z-10 text-sm">
+                <div class="flex justify-between items-center"><span class="text-slate-500">发生时间点</span><span class="font-mono font-bold text-slate-800 dark:text-white" id="ext_up_date">--</span></div>
+                <div class="flex justify-between items-center"><span class="text-slate-500">峰值总盈利金额</span><span class="font-mono font-bold text-blue-600 dark:text-blue-400" id="ext_up_val">--</span></div>
+                <div class="h-px bg-blue-100 dark:bg-blue-900/30 my-2"></div>
+                <div class="flex justify-between items-center"><span class="text-slate-500">此时网格已赚利润</span><span class="font-mono font-bold text-blue-600 dark:text-blue-400" id="ext_up_gridProfit">--</span></div>
+                <div class="flex justify-between items-center"><span class="text-slate-500">此时股票持仓浮盈</span><span class="font-mono font-bold text-red-500" id="ext_up_floatProfit">--</span></div>
+                <div class="flex justify-between items-center pt-2"><span class="text-slate-500 text-xs">峰值总资产净值</span><span class="font-mono font-bold" id="ext_up_equity">--</span></div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
         <!-- 资产效率追踪与摩擦精算 (横向整齐排列) -->
         <div class="mb-6">
           <h3 class="font-bold text-lg mb-4 text-slate-800 dark:text-slate-200 flex items-center">
@@ -334,10 +375,59 @@
             </div>
             <div class="h-48 w-full"><canvas id="drawdownChart"></canvas></div>
           </div>
+          
+          <!-- 新增：平均资金占用率 柱状图 -->
+          <div class="bg-white dark:bg-slate-800 rounded-xl p-5 border border-slate-200 dark:border-slate-700 shadow-sm relative">
+            <div class="flex justify-between items-center mb-4">
+              <h3 class="font-bold flex items-center text-lg"><i data-lucide="bar-chart" class="w-5 h-5 mr-2 text-indigo-500"></i> 平均资金占用率 (Capital Utilization)</h3>
+              <div class="flex bg-slate-100 dark:bg-slate-900 rounded p-1 border border-slate-200 dark:border-slate-700">
+                <button id="btn-util-month" onclick="switchUtilPeriod('monthly')" class="px-3 py-1 text-xs font-bold rounded bg-white dark:bg-slate-700 shadow-sm text-blue-600 transition-all">按月统计</button>
+                <button id="btn-util-week" onclick="switchUtilPeriod('weekly')" class="px-3 py-1 text-xs font-bold rounded text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition-all">按周统计</button>
+              </div>
+            </div>
+            <div class="h-48 w-full"><canvas id="utilizationChart"></canvas></div>
+          </div>
         </div>
       </div>
 
-      <!-- Tab 4: 交易流水 -->
+      <!-- Tab: 智能评测与建议 (新增模块) -->
+      <div id="tab-evaluation" class="tab-content">
+        <div class="max-w-4xl mx-auto space-y-6">
+          <div class="bg-white dark:bg-slate-800 rounded-2xl p-8 border border-slate-200 dark:border-slate-700 shadow-lg text-center relative overflow-hidden">
+            <div class="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500"></div>
+            <h2 class="text-2xl font-extrabold mb-2 text-slate-800 dark:text-white">智能策略体检报告</h2>
+            <p class="text-slate-500 text-sm mb-8">基于您的历史数据与当前参数配置，系统生成的自动诊断与调优建议。</p>
+            
+            <div class="flex flex-col items-center justify-center mb-6">
+              <div class="relative w-40 h-40 flex items-center justify-center rounded-full border-8 border-slate-100 dark:border-slate-700 mb-4">
+                <svg class="absolute inset-0 w-full h-full transform -rotate-90" viewBox="0 0 100 100">
+                  <circle cx="50" cy="50" r="46" fill="transparent" stroke="currentColor" stroke-width="8" class="text-indigo-500" id="evalScoreRing" stroke-dasharray="289" stroke-dashoffset="289" stroke-linecap="round"></circle>
+                </svg>
+                <span class="text-5xl font-black text-slate-800 dark:text-white" id="evalScoreText">0</span>
+              </div>
+              <p class="text-lg font-bold" id="evalScoreDesc">策略综合评分</p>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="bg-white dark:bg-slate-800 rounded-xl p-6 border border-slate-200 dark:border-slate-700 shadow-sm">
+              <h3 class="text-lg font-bold text-slate-800 dark:text-white mb-4 border-b border-slate-100 dark:border-slate-700 pb-2"><i data-lucide="stethoscope" class="w-5 h-5 inline-block mr-1 text-blue-500 -mt-1"></i> 策略表现诊断</h3>
+              <ul class="space-y-4 text-sm text-slate-600 dark:text-slate-300" id="evalDiagnosis">
+                <!-- 动态生成诊断列表 -->
+              </ul>
+            </div>
+            
+            <div class="bg-indigo-50 dark:bg-indigo-900/10 rounded-xl p-6 border border-indigo-100 dark:border-indigo-900/30 shadow-sm">
+              <h3 class="text-lg font-bold text-indigo-800 dark:text-indigo-300 mb-4 border-b border-indigo-200 dark:border-indigo-800/50 pb-2"><i data-lucide="lightbulb" class="w-5 h-5 inline-block mr-1 text-indigo-500 -mt-1"></i> 参数优化建议</h3>
+              <ul class="space-y-4 text-sm text-indigo-900/80 dark:text-indigo-200" id="evalAdvice">
+                <!-- 动态生成建议列表 -->
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab: 交易流水 -->
       <div id="tab-ledger" class="tab-content">
         <div class="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm h-[80vh] flex flex-col">
           <div class="px-6 py-4 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center bg-slate-50/50 dark:bg-slate-850/50">
@@ -383,6 +473,7 @@
       csvParsed: [],
       
       report: null,
+      utilPeriod: 'monthly', // 新增：全局资金占用率图表周期状态
       
       // 回放控制状态
       playbackTimer: null,
@@ -394,6 +485,7 @@
     let equityChartObj = null;
     let drawdownChartObj = null;
     let playbackChartObj = null;
+    let utilizationChartObj = null; // 新增：资金占用率图表实例
 
     // 根据要求，修改默认模板为：固定30-95区间、22万总本金、500底仓，100股/格独立批次
     const defaultTask = (id = Math.random().toString(36).substr(2, 9)) => ({
@@ -403,7 +495,7 @@
       strategyMode: "classic", 
       totalCapital: 220000, 
       initialShares: 500,
-      basePrice: 0, // 新增初次基准价设定 (0代表自动取首日价)
+      basePrice: 0, 
       upperBound: 95,
       lowerBound: 30,
       gridGap: 2, 
@@ -558,16 +650,12 @@
 
     function clearData() {
       const t = state.tasks.find(x => x.id === state.currentTaskId);
-      
-      // 修复：如果内存为空且任务状态也是未就绪，才提示没数据可清空
       if (state.rawPrices.length === 0 && state.csvParsed.length === 0 && (!t || !t.hasData)) {
         alert("当前没有可清空的数据！");
         return;
       }
-      
       if (!confirm("确定要彻底清空当前任务关联的所有数据和生成的回测报告吗？")) return;
       
-      // 1. 强行终止动画，清空内存数据
       clearInterval(state.playbackTimer);
       state.isPlaying = false;
       state.rawDates = [];
@@ -576,27 +664,19 @@
       state.csvParsed = [];
       state.report = null;
       
-      // 2. 更新任务状态，消掉绿色对号
-      if (t) {
-        t.hasData = false;
-        saveData();
-      }
+      if (t) { t.hasData = false; saveData(); }
       
-      // 3. 重置上传组件
       const fileInput = document.getElementById('csvFileInput');
       if (fileInput) fileInput.value = '';
       
-      // 4. 恢复各种 UI 文字状态
       document.getElementById('uploadStatus').innerText = "支持各种周期行情数据";
       document.getElementById('csvMappingArea').classList.add('hidden');
       document.getElementById('headSubInfo').innerText = "标的: -- | 数据跨度: --";
       
-      // 5. 销毁图表，防止切换后重绘残影
-      if(equityChartObj) { equityChartObj.destroy(); equityChartObj = null; }
       if(drawdownChartObj) { drawdownChartObj.destroy(); drawdownChartObj = null; }
       if(playbackChartObj) { playbackChartObj.destroy(); playbackChartObj = null; }
+      if(utilizationChartObj) { utilizationChartObj.destroy(); utilizationChartObj = null; }
       
-      // 6. 清空旧报告与流水数据
       document.getElementById('reportMetrics').innerHTML = '';
       document.getElementById('ledgerTable').innerHTML = '';
       document.getElementById('ledgerCount').innerText = '0 笔';
@@ -699,7 +779,6 @@
       }, 1500);
     }
 
-    // 辅助函数：将任意格式转为 YYYY-MM-DD 用于赋值给 input
     function toISODate(dateStr) {
       let d = new Date(dateStr);
       if(isNaN(d.getTime())) return '';
@@ -708,14 +787,32 @@
       return `${d.getFullYear()}-${m}-${day}`;
     }
 
-    // 辅助函数：提取绝对的“自然日”时间戳 (清除时分秒干扰)，用于精准判断 T+1
     function getDayStartMs(dateStr) {
       let d = new Date(dateStr);
       if(isNaN(d.getTime())) return 0;
       return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
     }
 
-    // ================= 量化回测核心引擎 (支持 T+1 拦截标记) =================
+    // 辅助函数：提取年月用于统计
+    function getYearMonth(dateStr) {
+      let d = new Date(dateStr);
+      if(isNaN(d.getTime())) return dateStr;
+      let m = (d.getMonth() + 1).toString().padStart(2, '0');
+      return `${d.getFullYear()}-${m}`;
+    }
+
+    // 辅助函数：提取所在周一的日期用于统计
+    function getWeekStart(dateStr) {
+      let d = new Date(dateStr);
+      if(isNaN(d.getTime())) return dateStr;
+      let day = d.getDay() || 7; 
+      d.setDate(d.getDate() - (day - 1)); 
+      let m = (d.getMonth() + 1).toString().padStart(2, '0');
+      let dd = d.getDate().toString().padStart(2, '0');
+      return `${d.getFullYear()}-${m}-${dd} (周)`;
+    }
+
+    // ================= 量化回测核心引擎 (支持 T+1 拦截标记 + 极值点记录) =================
     function runBacktest() {
       if (state.rawPrices.length === 0) return alert("请先在左侧配置区导入数据或载入模拟数据！");
       saveConfig(); 
@@ -733,7 +830,6 @@
         return;
       }
 
-      // 安全地给原生日期控件赋值
       document.getElementById('pb-start-date').value = toISODate(dates[0]);
       document.getElementById('pb-end-date').value = toISODate(dates[dates.length - 1]);
 
@@ -743,8 +839,7 @@
       let lots = [];
       let numLots = Math.floor(totalShares / t.sharesPerGrid);
       let remainder = totalShares % t.sharesPerGrid;
-      
-      let ancientDateMs = 0; // 用时间戳 0 代替原始底仓时间，绝对早于任何数据
+      let ancientDateMs = 0; 
 
       for(let i=0; i<numLots; i++) {
         lots.push({ buyPrice: startPrice, targetSell: getTargetSell(startPrice), shares: t.sharesPerGrid, date: ancientDateMs, t1Blocked: false });
@@ -799,7 +894,7 @@
       for(let step = 0; step < prices.length; step++) {
         let currentP = prices[step];
         let dt = dates[step];
-        let currentDayMs = getDayStartMs(dt); // 当天凌晨的绝对时间戳
+        let currentDayMs = getDayStartMs(dt); 
 
         let currentEquity = cash + (totalShares * currentP);
         equityCurve.push(currentEquity);
@@ -826,12 +921,10 @@
           let actionTaken = false;
           let t1TriggeredThisStep = false;
 
-          // ======= 1. 扫描并执行 SELL =======
           let sellLots = [];
           let keepLots = [];
           for (let l of lots) {
             if (currentP >= l.targetSell) {
-              // 精准的时间戳绝对比较，规避所有字符串缺陷
               if (currentDayMs > l.date) {
                 sellLots.push(l);
               } else {
@@ -864,7 +957,6 @@
             }
           }
 
-          // ======= 2. 扫描并执行 BUY =======
           if (inRange && !isTradingStopped) {
             let isZeroPosition = (totalShares === 0);
             let requiredCash = currentP * t.sharesPerGrid;
@@ -898,10 +990,36 @@
         executionHistory.push({ cash, totalShares, gridProfit });
       }
 
+      // 极值点扫描器
+      let maxDDVal = 0; let maxDDIndex = 0;
+      let maxEqVal = -Infinity; let maxEqIndex = 0;
+      
+      for (let i = 0; i < prices.length; i++) {
+        if (drawdownCurve[i] > maxDDVal) { maxDDVal = drawdownCurve[i]; maxDDIndex = i; }
+        if (equityCurve[i] > maxEqVal) { maxEqVal = equityCurve[i]; maxEqIndex = i; }
+      }
+
       let initialAsset = t.totalCapital; 
+      
+      let extMaxDD = {
+        date: dates[maxDDIndex],
+        val: maxDDVal,
+        gridProfit: executionHistory[maxDDIndex].gridProfit,
+        floatProfit: equityCurve[maxDDIndex] - initialAsset - executionHistory[maxDDIndex].gridProfit,
+        equity: equityCurve[maxDDIndex]
+      };
+
+      let extMaxProfit = {
+        date: dates[maxEqIndex],
+        val: equityCurve[maxEqIndex] - initialAsset,
+        gridProfit: executionHistory[maxEqIndex].gridProfit,
+        floatProfit: equityCurve[maxEqIndex] - initialAsset - executionHistory[maxEqIndex].gridProfit,
+        equity: equityCurve[maxEqIndex]
+      };
+
       let finalAsset = equityCurve[equityCurve.length - 1];
       let totalReturn = (finalAsset - initialAsset) / initialAsset;
-      let maxDrawdown = Math.max(...drawdownCurve);
+      let maxDrawdown = maxDDVal;
       
       let years = 1;
       if (dates.length > 1) {
@@ -932,6 +1050,36 @@
       let finalShares = totalShares;
       let finalPositionValue = totalShares * prices[prices.length - 1];
 
+      // 新增：计算按周/按月的平均资金占用率
+      let monthlyData = {};
+      let weeklyData = {};
+
+      for (let i = 0; i < prices.length; i++) {
+        let dt = dates[i];
+        let ym = getYearMonth(dt);
+        let yw = getWeekStart(dt);
+
+        let eq = equityCurve[i];
+        let c = executionHistory[i].cash;
+        let posValue = eq - c;
+        let util = eq > 0 ? (posValue / eq) * 100 : 0;
+        if (util < 0) util = 0;
+        if (util > 100) util = 100;
+
+        if (!monthlyData[ym]) monthlyData[ym] = { sum: 0, count: 0 };
+        monthlyData[ym].sum += util;
+        monthlyData[ym].count++;
+
+        if (!weeklyData[yw]) weeklyData[yw] = { sum: 0, count: 0 };
+        weeklyData[yw].sum += util;
+        weeklyData[yw].count++;
+      }
+
+      let utilization = {
+        monthly: { labels: Object.keys(monthlyData), data: Object.values(monthlyData).map(v => v.sum / v.count) },
+        weekly: { labels: Object.keys(weeklyData), data: Object.values(weeklyData).map(v => v.sum / v.count) }
+      };
+
       state.report = {
         equityCurve, drawdownCurve, dates, ledger, history: executionHistory,
         initialAsset, finalAsset, finalCash, finalShares, finalPositionValue,
@@ -939,17 +1087,18 @@
         annualizedReturn, maxDrawdown, sharpe,
         pairsCompleted, strandedCount, outOfBoundsCount,
         t1BlockCount, t1Events,
-        gridProfit, floatProfit, totalFee, lots
+        gridProfit, floatProfit, totalFee, lots, utilization,
+        extremePoints: { maxDD: extMaxDD, maxProfit: extMaxProfit }
       };
 
       renderReportUI();
+      renderEvaluationUI();
       renderLedger();
       initPlayback();
       switchTab('playback');
     }
 
     // ================= 动态回放核心逻辑 =================
-    // Chart.js 自定义插件：用于在图表上绘制 T 和 O 标记
     const textMarkerPlugin = {
       id: 'textMarkerPlugin',
       afterDatasetsDraw(chart) {
@@ -990,7 +1139,6 @@
       let startVal = document.getElementById('pb-start-date').value;
       let endVal = document.getElementById('pb-end-date').value;
 
-      // 使用安全时间戳对比规避截断，且增加容错保护
       state.playbackIndex = 0;
       state.playbackEndIndex = state.report.dates.length - 1;
 
@@ -1005,7 +1153,6 @@
           if (idx !== -1) state.playbackEndIndex = idx - 1;
       }
       
-      // 终极防死循环保护
       if (state.playbackEndIndex < state.playbackIndex || state.playbackEndIndex < 0) {
           state.playbackIndex = 0;
           state.playbackEndIndex = state.report.dates.length - 1;
@@ -1188,6 +1335,27 @@
       `;
       lucide.createIcons();
 
+      // 渲染极值点数据
+      const ext = r.extremePoints;
+      
+      document.getElementById('ext_dd_date').innerText = ext.maxDD.date;
+      document.getElementById('ext_dd_val').innerText = `-${ext.maxDD.val.toFixed(2)}%`;
+      document.getElementById('ext_dd_gridProfit').innerText = `+¥${ext.maxDD.gridProfit.toLocaleString('zh-CN', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
+      let floatSignDD = ext.maxDD.floatProfit >= 0 ? '+' : '';
+      let floatColorDD = ext.maxDD.floatProfit >= 0 ? 'text-red-500' : 'text-green-500';
+      document.getElementById('ext_dd_floatProfit').innerText = `${floatSignDD}¥${ext.maxDD.floatProfit.toLocaleString('zh-CN', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
+      document.getElementById('ext_dd_floatProfit').className = `font-mono font-bold ${floatColorDD}`;
+      document.getElementById('ext_dd_equity').innerText = `¥${ext.maxDD.equity.toLocaleString('zh-CN', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
+
+      document.getElementById('ext_up_date').innerText = ext.maxProfit.date;
+      document.getElementById('ext_up_val').innerText = `+¥${ext.maxProfit.val.toLocaleString('zh-CN', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
+      document.getElementById('ext_up_gridProfit').innerText = `+¥${ext.maxProfit.gridProfit.toLocaleString('zh-CN', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
+      let floatSignUP = ext.maxProfit.floatProfit >= 0 ? '+' : '';
+      let floatColorUP = ext.maxProfit.floatProfit >= 0 ? 'text-red-500' : 'text-green-500';
+      document.getElementById('ext_up_floatProfit').innerText = `${floatSignUP}¥${ext.maxProfit.floatProfit.toLocaleString('zh-CN', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
+      document.getElementById('ext_up_floatProfit').className = `font-mono font-bold ${floatColorUP}`;
+      document.getElementById('ext_up_equity').innerText = `¥${ext.maxProfit.equity.toLocaleString('zh-CN', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
+
       document.getElementById('r_finalAsset').innerText = `¥${r.finalAsset.toLocaleString('zh-CN', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
       document.getElementById('r_finalCash').innerText = `¥${r.finalCash.toLocaleString('zh-CN', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
       document.getElementById('r_finalShares').innerText = r.finalShares;
@@ -1208,6 +1376,65 @@
       document.getElementById('r_stranded').innerText = `${r.strandedCount} 次`;
       document.getElementById('r_t1Blocks').innerText = `${r.t1BlockCount} 次`;
       document.getElementById('r_outOfBounds').innerText = `${r.outOfBoundsCount} 次`;
+    }
+
+    function renderEvaluationUI() {
+      const r = state.report;
+      if (!r) return;
+
+      // 1. 计算评分
+      let score = 50; 
+      score += (r.annualizedReturn / 2);
+      score += (r.sharpe * 10);
+      score -= (r.maxDrawdown / 1.5);
+      if (score > 99) score = 99;
+      if (score < 10) score = 10;
+      score = Math.round(score);
+
+      document.getElementById('evalScoreText').innerText = score;
+      const ring = document.getElementById('evalScoreRing');
+      let dashoffset = 289 - (289 * score / 100);
+      ring.style.strokeDashoffset = dashoffset;
+      if (score >= 80) ring.className.baseVal = "text-red-500";
+      else if (score >= 60) ring.className.baseVal = "text-blue-500";
+      else ring.className.baseVal = "text-green-500";
+
+      document.getElementById('evalScoreDesc').innerText = score >= 80 ? '策略表现优异 (S级)' : (score >= 60 ? '策略表现良好 (A级)' : '策略存在高风险 (B级及以下)');
+
+      // 2. 生成诊断报告
+      let diagHtml = '';
+      let feeRatio = r.gridProfit > 0 ? (r.totalFee / r.gridProfit) * 100 : 0;
+      
+      if (feeRatio > 20) {
+        diagHtml += `<li><span class="text-red-500 font-bold">⚠️ 摩擦成本警告：</span> 您的交易税费占网格利润的 ${feeRatio.toFixed(1)}%。频繁的超小幅网格交易正在严重吞噬您的利润。</li>`;
+      } else {
+        diagHtml += `<li><span class="text-green-500 font-bold">✅ 摩擦成本健康：</span> 税费占利润的 ${feeRatio.toFixed(1)}%，处于合理可控区间。</li>`;
+      }
+
+      if (r.extremePoints.maxDD.floatProfit < 0 && Math.abs(r.extremePoints.maxDD.floatProfit) > r.extremePoints.maxDD.gridProfit * 1.5) {
+        diagHtml += `<li><span class="text-orange-500 font-bold">⚠️ 风险垫被击穿：</span> 在最大回撤时期(${r.extremePoints.maxDD.date})，股票浮亏高达 ${Math.abs(r.extremePoints.maxDD.floatProfit).toFixed(0)}元，远超同期网格利润积累，网格安全垫失效。</li>`;
+      } else {
+        diagHtml += `<li><span class="text-green-500 font-bold">✅ 抗跌能力极强：</span> 即使在最大回撤时期，网格积攒的利润依然能较好地对冲底仓下跌风险。</li>`;
+      }
+
+      if (r.t1BlockCount > r.pairsCompleted * 0.3) {
+        diagHtml += `<li><span class="text-orange-500 font-bold">⚠️ T+1限制严重：</span> 共发生 ${r.t1BlockCount} 次 T+1 拦截，说明该标的日内波动极大，您可能错失了大量日内高抛机会。</li>`;
+      }
+
+      if (r.strandedCount > r.pairsCompleted) {
+        diagHtml += `<li><span class="text-red-500 font-bold">⚠️ 资金利用低效：</span> 系统因缺少资金或触及底线导致 ${r.strandedCount} 次想买却买不了，资金或仓位配置不合理。</li>`;
+      }
+      
+      document.getElementById('evalDiagnosis').innerHTML = diagHtml || '<li>暂无明显异常诊断。</li>';
+
+      // 3. 生成调优建议
+      let advHtml = '';
+      if (feeRatio > 20) advHtml += `<li>👉 <strong class="text-indigo-600 dark:text-indigo-400">扩大网格差价：</strong> 尝试将 [每格幅度] 调大（如从 2% 调至 3%~4%），减少无效换手。</li>`;
+      if (r.strandedCount > r.pairsCompleted) advHtml += `<li>👉 <strong class="text-indigo-600 dark:text-indigo-400">降低建仓底仓或加大本金：</strong> 留出更多现金用于下跌时的买入；或改用【动态追踪模式】。</li>`;
+      if (r.t1BlockCount > r.pairsCompleted * 0.3) advHtml += `<li>👉 <strong class="text-indigo-600 dark:text-indigo-400">扩大差价或转向期权ETF：</strong> 针对 T+1 严重受限的个股，建议提高利润目标；或将标的换为支持 T+0 的 ETF。</li>`;
+      if (r.outOfBoundsCount > state.rawPrices.length * 0.2) advHtml += `<li>👉 <strong class="text-indigo-600 dark:text-indigo-400">重新标定网格区间：</strong> 价格有 ${r.outOfBoundsCount} 次运行在设定区间外，请修改上下限，或使用【动态追踪模式】。</li>`;
+      
+      document.getElementById('evalAdvice').innerHTML = advHtml || '<li>👉 当前参数适配良好，建议保持当前策略架构，可尝试调整标的测试普适性。</li>';
     }
 
     function renderCharts() {
@@ -1244,6 +1471,64 @@
           } 
         }
       });
+
+      renderUtilizationChart();
+    }
+
+    // 新增：切换并渲染资金占用率图表
+    function switchUtilPeriod(period) {
+      state.utilPeriod = period;
+      document.getElementById('btn-util-month').className = `px-3 py-1 text-xs font-bold rounded transition-all ${period === 'monthly' ? 'bg-white dark:bg-slate-700 shadow-sm text-blue-600' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`;
+      document.getElementById('btn-util-week').className = `px-3 py-1 text-xs font-bold rounded transition-all ${period === 'weekly' ? 'bg-white dark:bg-slate-700 shadow-sm text-blue-600' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`;
+      renderUtilizationChart();
+    }
+
+    function renderUtilizationChart() {
+      const r = state.report;
+      if (!r || !r.utilization) return;
+
+      const themeColor = state.isDark ? '#cbd5e1' : '#475569';
+      const gridColor = state.isDark ? 'rgba(51, 65, 85, 0.5)' : 'rgba(226, 232, 240, 0.8)';
+      const period = state.utilPeriod || 'monthly';
+      const dataSet = r.utilization[period];
+
+      if (utilizationChartObj) utilizationChartObj.destroy();
+      const ctx = document.getElementById('utilizationChart').getContext('2d');
+
+      utilizationChartObj = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: dataSet.labels,
+          datasets: [{
+            label: '平均资金占用率',
+            data: dataSet.data,
+            backgroundColor: 'rgba(99, 102, 241, 0.6)', 
+            borderColor: '#6366f1',
+            borderWidth: 1,
+            borderRadius: 2,
+            hoverBackgroundColor: 'rgba(99, 102, 241, 0.9)'
+          }]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: function(context) { return context.parsed.y.toFixed(2) + '%'; }
+              }
+            },
+            zoom: {
+              pan: { enabled: true, mode: 'x' },
+              zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'x' }
+            }
+          },
+          scales: {
+            x: { grid: { display: false }, ticks: { maxTicksLimit: period === 'monthly' ? 24 : 52, color: themeColor } },
+            y: { grid: { color: gridColor }, ticks: { callback: v => v + '%', color: themeColor }, min: 0, max: 100 }
+          }
+        }
+      });
     }
 
     function renderLedger() {
@@ -1253,7 +1538,6 @@
       let html = '';
       r.ledger.forEach(l => {
         let isBuy = l.action === 'BUY';
-        // 如果这笔卖出订单中包含了曾经被T+1限制过的批次，那么显示显眼的 [O] 标识
         let layerHtml = l.isDelayedSell ? `<span class="text-blue-500 font-bold mr-1" title="摆脱T+1后的延迟卖出">[O]</span>${l.layer}` : l.layer;
         
         html += `<tr class="hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-colors">
