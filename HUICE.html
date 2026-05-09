@@ -45,7 +45,7 @@
         <i data-lucide="bar-chart-2" class="text-blue-600 dark:text-blue-400"></i>
         <div>
           <h1 class="font-bold text-lg leading-tight tracking-tight">GridLab <span class="text-blue-500">Pro</span></h1>
-          <p class="text-[10px] text-slate-400 font-mono">Portfolio Engine v11.0</p>
+          <p class="text-[10px] text-slate-400 font-mono">Portfolio Engine v13.3</p>
         </div>
       </div>
       <button id="themeToggle" class="p-1.5 rounded-md hover:bg-slate-100 dark:hover:bg-slate-700 transition">
@@ -91,9 +91,9 @@
         <!-- 全局监控头部信息 (资金池) -->
         <div id="globalHeaderInfo" class="hidden">
            <h2 class="text-xl font-bold text-purple-600 dark:text-purple-400 flex items-center">
-            <i data-lucide="shield-check" class="w-5 h-5 mr-2"></i> 全局资产组合监控看板
+            <i data-lucide="shield-check" class="w-5 h-5 mr-2"></i> 全局动态资产池监控看板
           </h2>
-          <div class="text-xs text-slate-500 mt-1">跨标的、跨周期资金池溢出极速精算系统</div>
+          <div class="text-xs text-slate-500 mt-1">引入利润复利与止损缩水机制的跨周期真实占位精算系统</div>
         </div>
 
         <!-- 全局 AI 评测头部信息 -->
@@ -123,7 +123,7 @@
           <i data-lucide="pie-chart" class="w-4 h-4 mr-1"></i> 单标的报告
         </button>
         <button id="btn-tab-evaluation" onclick="switchTab('evaluation')" class="tab-btn pb-3 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 transition-all flex items-center shrink-0">
-          <i data-lucide="activity" class="w-4 h-4 mr-1"></i> 单标的体检
+          <i data-lucide="activity" class="w-4 h-4 mr-1"></i> 单体评估
         </button>
         <button id="btn-tab-ledger" onclick="switchTab('ledger')" class="tab-btn pb-3 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 transition-all flex items-center shrink-0">
           <i data-lucide="list" class="w-4 h-4 mr-1"></i> 流水明细
@@ -157,7 +157,10 @@
 
               <div id="dataStatusPanel" class="flex-1 bg-slate-50 dark:bg-slate-900 rounded-lg border border-slate-100 dark:border-slate-700 p-4">
                 <div class="flex items-center justify-between mb-4">
-                  <span class="text-sm font-bold">当前数据状态</span>
+                  <div class="flex items-baseline">
+                    <span class="text-sm font-bold">当前数据状态</span>
+                    <span class="text-xs text-blue-500 ml-3 font-mono truncate max-w-[150px]" id="infoFileName" title=""></span>
+                  </div>
                   <span class="px-2 py-1 bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 text-xs rounded border border-green-200 dark:border-green-800" id="dataReadyBadge">未就绪</span>
                 </div>
                 <div class="grid grid-cols-2 gap-4 text-sm">
@@ -209,12 +212,24 @@
                 <!-- 网格参数 -->
                 <div>
                   <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">网格拓扑结构 (浮动锚点)</h4>
+                  
+                  <div class="col-span-full mb-3">
+                    <label class="block text-xs font-bold text-slate-500 mb-1 flex items-center">
+                      <i data-lucide="shield" class="w-3 h-3 mr-1 text-green-500"></i> 资金防御衰减机制 (防极寒套死)
+                    </label>
+                    <select id="p_gapMultiplier" class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded px-3 py-1.5 text-sm focus:border-blue-500">
+                      <option value="1">无防御 (固定间距，大熊市极易迅速吸干硬上限资金)</option>
+                      <option value="2">轻度防御：当资金占用 > 50% 时，网格间距自动拉宽 2 倍</option>
+                      <option value="3" selected>深度防御：资金占用 > 50% 间距拉宽 2 倍，> 75% 拉宽 3 倍</option>
+                    </select>
+                  </div>
+
                   <div class="grid grid-cols-2 gap-4 mb-3">
                     <div><label class="block text-xs text-slate-500 mb-1">初始交易上限价</label><input type="number" step="0.01" id="p_upper" class="w-full bg-slate-50 dark:bg-slate-900 border border-red-200 dark:border-red-900/50 rounded px-3 py-1.5 text-sm font-mono text-red-600 dark:text-red-400"></div>
                     <div><label class="block text-xs text-slate-500 mb-1">初始交易下限价</label><input type="number" step="0.01" id="p_lower" class="w-full bg-slate-50 dark:bg-slate-900 border border-green-200 dark:border-green-900/50 rounded px-3 py-1.5 text-sm font-mono text-green-600 dark:text-green-400"></div>
                   </div>
                   <div class="grid grid-cols-3 gap-4">
-                    <div><label class="block text-xs text-slate-500 mb-1">每格幅度/差价</label><input type="number" step="0.01" id="p_gridGap" class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded px-3 py-1.5 text-sm font-mono" placeholder="金额或百分比"></div>
+                    <div><label class="block text-xs text-slate-500 mb-1">基准每格幅度/差价</label><input type="number" step="0.01" id="p_gridGap" class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded px-3 py-1.5 text-sm font-mono" placeholder="金额或百分比"></div>
                     <div>
                       <label class="block text-xs text-slate-500 mb-1">幅度模式</label>
                       <select id="p_gridMode" class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded px-3 py-1.5 text-sm">
@@ -236,7 +251,7 @@
                   </div>
                 </div>
                 <div class="h-px bg-slate-100 dark:bg-slate-700"></div>
-                <!-- 核心升级：动态持仓均价止损控制 -->
+                <!-- 极端止损控制 -->
                 <div>
                   <h4 class="text-xs font-bold text-red-500 uppercase tracking-wider mb-2 flex items-center">
                     <i data-lucide="shield-alert" class="w-4 h-4 mr-1"></i> 动态持仓均价追踪止损 (防爆死线)
@@ -358,11 +373,8 @@
             </div>
             <div class="bg-white dark:bg-slate-800 rounded-xl p-5 border border-slate-200 dark:border-slate-700 shadow-sm transition-shadow hover:shadow-md">
               <h4 class="text-xs font-bold text-slate-400 mb-4 uppercase tracking-wider flex items-center"><i data-lucide="scissors" class="w-3 h-3 mr-1"></i> 盈亏结构分析</h4>
-              <div class="space-y-3 text-sm">
-                <div class="flex justify-between items-center"><span class="text-slate-500">网格套利净利润</span><span class="font-mono font-bold text-blue-600 dark:text-blue-400 text-base" id="r_gridProfit">¥0.00</span></div>
-                <div class="flex justify-between items-center"><span class="text-slate-500">持仓底仓浮动盈亏</span><span class="font-mono font-bold" id="r_floatProfit">¥0.00</span></div>
-                <div class="flex justify-between items-center mt-1 pt-3 border-t border-slate-100 dark:border-slate-700/50"><span class="text-slate-500">累计交易税费总额</span><span class="font-mono font-bold text-red-500" id="r_totalFee">¥0.00</span></div>
-                <div class="flex justify-between items-center"><span class="text-slate-500">税费吃掉利润占比</span><span class="font-mono font-bold" id="r_feeRatio">0.00%</span></div>
+              <div class="space-y-3 text-sm" id="pnl_structure_list">
+                 <!-- 动态替换内容 -->
               </div>
             </div>
             <div class="bg-white dark:bg-slate-800 rounded-xl p-5 border border-slate-200 dark:border-slate-700 shadow-sm transition-shadow hover:shadow-md">
@@ -371,14 +383,14 @@
                 <div class="flex justify-between items-center"><span class="text-slate-500">完全成对套利批次</span><span class="font-mono font-bold text-slate-800 dark:text-white" id="r_completed">0 批次</span></div>
                 <div class="flex justify-between items-center"><span class="text-slate-500">买入后未卖出 (套牢)</span><span class="font-mono font-bold text-orange-500" id="r_stranded">0 次</span></div>
                 <div class="flex justify-between items-center" title="因T+1限制导致未能第一时间止盈卖出"><span class="text-slate-500 border-b border-dashed border-slate-400 cursor-help">T+1 保护拦截数</span><span class="font-mono font-bold text-yellow-500" id="r_t1Blocks">0 次</span></div>
-                <div class="flex justify-between items-center"><span class="text-slate-500">因撞击硬上限阻挡买入</span><span class="font-mono font-bold text-red-500" id="r_outOfBounds">0 次</span></div>
+                <div class="flex justify-between items-center"><span class="text-slate-500">本该买入却被资金硬上限拦截</span><span class="font-mono font-bold text-red-500" id="r_outOfBounds">0 次</span></div>
               </div>
             </div>
           </div>
         </div>
         
         <div class="space-y-6">
-          <!-- 动态成本与止损线追踪图 (核心新增) -->
+          <!-- 动态成本与止损线追踪图 -->
           <div class="bg-white dark:bg-slate-800 rounded-xl p-5 border border-slate-200 dark:border-slate-700 shadow-sm relative">
             <div class="flex justify-between items-center mb-4">
               <h3 class="font-bold flex items-center text-lg"><i data-lucide="trending-down" class="w-5 h-5 mr-2 text-orange-500"></i> 动态持仓成本与止损线追踪</h3>
@@ -407,7 +419,7 @@
         </div>
       </div>
 
-      <!-- Tab: 单标的体检 -->
+      <!-- Tab: 单体评估 -->
       <div id="tab-evaluation" class="tab-content">
         <div class="max-w-4xl mx-auto space-y-6">
           <div class="bg-white dark:bg-slate-800 rounded-2xl p-8 border border-slate-200 dark:border-slate-700 shadow-lg text-center relative overflow-hidden">
@@ -453,10 +465,11 @@
                   <th class="py-3 px-4 font-medium text-center">交易方向</th>
                   <th class="py-3 px-4 font-medium">执行单价</th>
                   <th class="py-3 px-4 font-medium">成交量</th>
-                  <th class="py-3 px-4 font-medium">占用资金/落袋</th>
-                  <th class="py-3 px-4 font-medium text-red-500">单笔摩擦损耗</th>
+                  <th class="py-3 px-4 font-medium text-blue-500">当前持仓股数</th>
+                  <th class="py-3 px-4 font-medium text-orange-500">当前占用金额</th>
+                  <th class="py-3 px-4 font-medium text-red-500">摩擦损耗</th>
                   <th class="py-3 px-4 font-medium text-blue-500">该批次落袋利润</th>
-                  <th class="py-3 px-4 font-medium text-left">关联批次锚点记录</th>
+                  <th class="py-3 px-4 font-medium text-left">备注 / 关联批次</th>
                 </tr>
               </thead>
               <tbody id="ledgerTable" class="divide-y divide-slate-100 dark:divide-slate-800 font-mono text-[13px]">
@@ -480,7 +493,7 @@
             </div>
             <div class="flex space-x-6 items-end bg-white dark:bg-slate-900 p-4 rounded-lg border border-slate-200 dark:border-slate-700">
               <div class="flex-1">
-                <label class="block text-xs font-bold text-slate-500 mb-1">全局共享总资金池规模 (¥)</label>
+                <label class="block text-xs font-bold text-slate-500 mb-1">全局初始资金池本金 (¥)</label>
                 <input type="number" id="port_pool_size" value="600000" class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded px-3 py-2 text-base font-mono font-bold text-purple-600 dark:text-purple-400 outline-none focus:border-purple-500">
               </div>
               <div class="flex-1">
@@ -518,7 +531,7 @@
               <div class="absolute -right-4 -bottom-4 opacity-20"><i data-lucide="banknote" class="w-32 h-32"></i></div>
               <h3 class="text-indigo-100 text-sm font-bold mb-2">全标的总合集绝对净利润</h3>
               <p class="text-4xl font-black mb-1" id="global_total_profit">¥0.00</p>
-              <p class="text-xs text-indigo-100/80">包含网格套利 + 所有底仓浮动盈亏</p>
+              <p class="text-xs text-indigo-100/80">网格利润 + 浮动盈亏 + 极端止损实亏</p>
             </div>
             <div class="bg-white dark:bg-slate-800 rounded-2xl p-6 border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col justify-center">
               <h3 class="text-slate-500 dark:text-slate-400 text-sm font-bold mb-2">组合总交易对数</h3>
@@ -573,7 +586,7 @@
               <h3 class="text-lg font-bold text-red-600 dark:text-red-400 mb-4 flex items-center border-b border-red-100 dark:border-red-900/30 pb-3">
                 <i data-lucide="siren" class="w-5 h-5 mr-2"></i> AI 动态重仓防爆系统核验
               </h3>
-              <p class="text-xs text-slate-500 mb-4">系统已经从底层切入您的风控策略，根据您配置的【动态回撤比例】，为您全时段计算真实持仓成本，并在以下极端情况下提供了自动熔断保护：</p>
+              <p class="text-xs text-slate-500 mb-4">系统已经从底层切入您的风控策略，根据您配置的【动态回撤比例】，为您全时段计算真实持仓成本，并在极端情况下执行了自动熔断保护：</p>
               <ul class="space-y-4 text-sm" id="global_stoploss_advice">
                 <!-- JS 生成 -->
               </ul>
@@ -610,7 +623,7 @@
   <script>
     lucide.createIcons();
 
-    // ================= 全局状态与默认配置 =================
+    // ================= 全局状态与默认配置 (支持沙盒) =================
     let state = {
       isDark: true,
       tasks: [],
@@ -631,7 +644,7 @@
     let playbackChartObj = null;
     let utilizationChartObj = null; 
     let portfolioChartObj = null;
-    let stopLossChartObj = null; // 新增动态止损图表实例
+    let stopLossChartObj = null; 
 
     const defaultTask = (id = Math.random().toString(36).substr(2, 9), index = 1) => ({
       id,
@@ -647,12 +660,14 @@
       gridGap: 2, 
       gridMode: "geometric", 
       sharesPerGrid: 100,
+      gapMultiplier: 3, 
       commRate: 0.00025,
       stampDuty: 0.0005,
       slippage: 0.001, 
       useStopLoss: false, 
-      stopLossPercent: 33, // 核心升级：默认为 33% 的动态均价回撤死线
+      stopLossPercent: 33, 
       hasData: false,
+      fileName: '', // 新增：保存文件名
       rawDates: [],
       rawPrices: [],
       csvHeaders: [],
@@ -668,7 +683,7 @@
       if (localStorage.getItem('glp_dark') !== null) state.isDark = localStorage.getItem('glp_dark') === 'true';
       applyTheme();
 
-      const savedData = localStorage.getItem('glp_tasks_v11'); 
+      const savedData = localStorage.getItem('glp_tasks_v14'); // 升级缓存版本号
       if (savedData) {
         try {
           let parsed = JSON.parse(savedData);
@@ -747,6 +762,46 @@
 
     function applyTheme() {
       document.documentElement.classList.toggle('dark', state.isDark);
+    }
+
+    // 强制清理与当前任务无关的残留视图 UI
+    function clearReportUI() {
+        document.getElementById('reportMetrics').innerHTML = '';
+        document.getElementById('pnl_structure_list').innerHTML = '';
+        document.getElementById('ext_dd_date').innerText = '--';
+        document.getElementById('ext_dd_val').innerText = '--%';
+        document.getElementById('ext_dd_gridProfit').innerText = '--';
+        document.getElementById('ext_dd_floatProfit').innerText = '--';
+        document.getElementById('ext_dd_equity').innerText = '--';
+        document.getElementById('ext_up_date').innerText = '--';
+        document.getElementById('ext_up_val').innerText = '--';
+        document.getElementById('ext_up_gridProfit').innerText = '--';
+        document.getElementById('ext_up_floatProfit').innerText = '--';
+        document.getElementById('ext_up_equity').innerText = '--';
+        document.getElementById('r_finalAsset').innerText = '¥0.00';
+        document.getElementById('r_finalCash').innerText = '¥0.00';
+        document.getElementById('r_finalShares').innerText = '0';
+        document.getElementById('r_finalPosition').innerText = '¥0.00';
+        document.getElementById('r_completed').innerText = '0 批次';
+        document.getElementById('r_stranded').innerText = '0 次';
+        document.getElementById('r_t1Blocks').innerText = '0 次';
+        document.getElementById('r_outOfBounds').innerText = '0 次';
+        document.getElementById('evalScoreText').innerText = '0';
+        document.getElementById('evalScoreDesc').innerText = '策略综合评分';
+        document.getElementById('evalDiagnosis').innerHTML = '<li>暂无数据，请运行回测。</li>';
+        document.getElementById('evalAdvice').innerHTML = '<li>暂无数据，请运行回测。</li>';
+        document.getElementById('ledgerTable').innerHTML = '';
+        document.getElementById('ledgerCount').innerText = '0 笔';
+
+        const ring = document.getElementById('evalScoreRing');
+        if (ring) {
+            ring.style.strokeDashoffset = 289;
+            ring.className.baseVal = "text-slate-300 dark:text-slate-700";
+        }
+
+        if(drawdownChartObj) { drawdownChartObj.destroy(); drawdownChartObj = null; }
+        if(stopLossChartObj) { stopLossChartObj.destroy(); stopLossChartObj = null; }
+        if(utilizationChartObj) { utilizationChartObj.destroy(); utilizationChartObj = null; }
     }
 
     function renderTaskList() {
@@ -873,10 +928,29 @@
       
       const t = getCurrentTask();
       document.getElementById('headTitle').innerText = t.name;
+
+      // 核心修复：重置上传文件框和文字提示，避免多个标的串台
+      const fileInput = document.getElementById('csvFileInput');
+      if (fileInput) fileInput.value = '';
+      document.getElementById('uploadStatus').innerText = '支持各种周期行情数据';
+      document.getElementById('csvMappingArea').classList.add('hidden');
       
       renderTaskList();
       loadConfigToForm(t);
       updateDataStatusUI();
+      
+      // 核心修复：根据当前任务是否已生成报告，强制重新映射视图，杜绝幽灵残影
+      if (t.report) {
+          renderReportUI();
+          renderEvaluationUI();
+          renderLedger();
+          if (document.getElementById('tab-report').classList.contains('active')) {
+             renderCharts();
+          }
+      } else {
+          clearReportUI();
+      }
+
       switchTab('config');
     }
 
@@ -887,11 +961,12 @@
             id: t.id, name: t.name, isCustomName: t.isCustomName, symbol: t.symbol, strategyMode: t.strategyMode,
             totalCapital: t.totalCapital, initialShares: t.initialShares, basePrice: t.basePrice,
             upperBound: t.upperBound, lowerBound: t.lowerBound, gridGap: t.gridGap,
-            gridMode: t.gridMode, sharesPerGrid: t.sharesPerGrid, commRate: t.commRate,
-            stampDuty: t.stampDuty, slippage: t.slippage, useStopLoss: t.useStopLoss, stopLossPercent: t.stopLossPercent, hasData: false
+            gridMode: t.gridMode, sharesPerGrid: t.sharesPerGrid, gapMultiplier: t.gapMultiplier, commRate: t.commRate,
+            stampDuty: t.stampDuty, slippage: t.slippage, useStopLoss: t.useStopLoss, stopLossPercent: t.stopLossPercent,
+            hasData: false, fileName: t.fileName || '' // 新增保存文件名状态
           };
         });
-        localStorage.setItem('glp_tasks_v11', JSON.stringify(pureTasks));
+        localStorage.setItem('glp_tasks_v14', JSON.stringify(pureTasks));
       } catch (e) { console.warn("Save Error", e); }
     }
 
@@ -909,7 +984,9 @@
         activeBtn.classList.add('border-blue-600', 'text-blue-600');
       }
 
-      if(tabId === 'report' && getCurrentTask().report) setTimeout(renderCharts, 50); 
+      if(tabId === 'report' && getCurrentTask() && getCurrentTask().report) {
+          setTimeout(renderCharts, 50); 
+      }
     }
 
     // ================= 数据导入与解析 =================
@@ -918,15 +995,17 @@
       if (!file) return;
       document.getElementById('uploadStatus').innerText = `解析: ${file.name}...`;
       const reader = new FileReader();
-      reader.onload = (e) => processCSVText(e.target.result);
+      reader.onload = (e) => processCSVText(e.target.result, file.name); // 传入文件名
       reader.readAsText(file, 'UTF-8'); 
     }
 
-    function processCSVText(text) {
+    function processCSVText(text, fileName) {
       const t = getCurrentTask();
       const lines = text.split(/\r?\n/).filter(line => line.trim() !== '');
       if (lines.length < 2) return alert("无效的CSV");
       
+      t._pendingFileName = fileName; // 暂存待映射的文件名
+
       t.csvHeaders = lines[0].split(',').map(h => h.replace(/["']/g, '').trim());
       t.csvParsed = lines.slice(1).map(line => line.split(',').map(c => c.replace(/["']/g, '').trim()));
       
@@ -960,6 +1039,36 @@
       t.rawPrices = prices;
       t.hasData = true;
       
+      // 新增：应用文件名，并自动去除 .csv 后缀来重命名当前标的
+      if (t._pendingFileName) {
+        t.fileName = t._pendingFileName;
+        let baseName = t.fileName.replace(/\.[^/.]+$/, ""); // 去除后缀名
+        t.name = baseName;
+        t.isCustomName = true;
+        document.getElementById('headTitle').innerText = t.name;
+        delete t._pendingFileName;
+      }
+      
+      saveData();
+      renderTaskList();
+      updateDataStatusUI();
+      document.getElementById('csvMappingArea').classList.add('hidden');
+      document.getElementById('uploadStatus').innerText = `加载成功! (${prices.length}条)`;
+    }
+
+    function clearData() {
+      const t = getCurrentTask();
+      if (t.rawPrices.length === 0 && t.csvParsed.length === 0 && !t.hasData) {
+        alert("本标的当前没有可清空的数据！");
+        return;
+      }
+      if (!confirm(`确定要彻底清空标的 [${t.name}] 关联的所有数据和报告吗？`)) return;
+      
+      clearInterval(state.playbackTimer);
+      state.isPlaying = false;
+      state.hasRunPortfolio = false;
+
+      t.rawDates = []; t.rawPrices = []; t.csvHeaders = []; t.csvParsed = []; t.report = null; t.hasData = false; t.fileName = ''; // 清除文件名
       saveData();
       renderTaskList();
       updateDataStatusUI();
@@ -984,19 +1093,12 @@
       
       const fileInput = document.getElementById('csvFileInput');
       if (fileInput) fileInput.value = '';
-      
       document.getElementById('uploadStatus').innerText = "支持各种周期行情数据";
       document.getElementById('csvMappingArea').classList.add('hidden');
       
-      if(drawdownChartObj) { drawdownChartObj.destroy(); drawdownChartObj = null; }
-      if(stopLossChartObj) { stopLossChartObj.destroy(); stopLossChartObj = null; }
       if(playbackChartObj) { playbackChartObj.destroy(); playbackChartObj = null; }
-      if(utilizationChartObj) { utilizationChartObj.destroy(); utilizationChartObj = null; }
       
-      document.getElementById('reportMetrics').innerHTML = '';
-      document.getElementById('ledgerTable').innerHTML = '';
-      document.getElementById('ledgerCount').innerText = '0 笔';
-      
+      clearReportUI();
       renderTaskList();
       updateDataStatusUI();
     }
@@ -1013,12 +1115,16 @@
         d.setDate(d.getDate() + 1); if(d.getDay() === 6) d.setDate(d.getDate() + 2); 
       }
       t.rawDates = dates; t.rawPrices = prices; t.hasData = true;
+      t.fileName = '模拟波动行情.csv'; t.name = '模拟行情标的'; t.isCustomName = true;
+      document.getElementById('headTitle').innerText = t.name;
       loadConfigToForm(t); saveData(); renderTaskList(); updateDataStatusUI();
     }
 
     function updateDataStatusUI() {
       const t = getCurrentTask();
       const badge = document.getElementById('dataReadyBadge');
+      const fileSpan = document.getElementById('infoFileName'); // 获取新增的文件名显示区域
+
       if (t.rawPrices && t.rawPrices.length > 0) {
         badge.innerText = "数据已就绪";
         badge.className = "px-2 py-1 bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 text-xs rounded border border-green-200 dark:border-green-800";
@@ -1027,6 +1133,15 @@
         document.getElementById('infoDataEnd').innerText = t.rawDates[t.rawDates.length-1];
         document.getElementById('infoPriceStart').innerText = `¥${t.rawPrices[0]}`;
         document.getElementById('headSubInfo').innerText = `测试序列 | ${t.rawDates[0]} 至 ${t.rawDates[t.rawDates.length-1]}`;
+        
+        // 显示文件名并增加 Title 浮浮窗
+        if (t.fileName) {
+            fileSpan.innerText = `📄 ${t.fileName}`;
+            fileSpan.title = t.fileName;
+        } else {
+            fileSpan.innerText = '';
+            fileSpan.title = '';
+        }
       } else {
         badge.innerText = "等待数据导入";
         badge.className = "px-2 py-1 bg-slate-200 dark:bg-slate-700 text-slate-500 text-xs rounded";
@@ -1035,6 +1150,8 @@
         document.getElementById('infoDataEnd').innerText = "--";
         document.getElementById('infoPriceStart').innerText = "--";
         document.getElementById('headSubInfo').innerText = "标的: -- | 数据跨度: --";
+        fileSpan.innerText = '';
+        fileSpan.title = '';
       }
     }
 
@@ -1048,6 +1165,7 @@
       document.getElementById('p_gridGap').value = t.gridGap;
       document.getElementById('p_gridMode').value = t.gridMode;
       document.getElementById('p_sharesPerGrid').value = t.sharesPerGrid;
+      document.getElementById('p_gapMultiplier').value = t.gapMultiplier || 1;
       document.getElementById('p_commRate').value = t.commRate;
       document.getElementById('p_stampDuty').value = t.stampDuty;
       document.getElementById('p_slippage').value = t.slippage;
@@ -1068,6 +1186,7 @@
       t.gridGap = Number(document.getElementById('p_gridGap').value);
       t.gridMode = document.getElementById('p_gridMode').value;
       t.sharesPerGrid = Number(document.getElementById('p_sharesPerGrid').value);
+      t.gapMultiplier = Number(document.getElementById('p_gapMultiplier').value); 
       t.commRate = Number(document.getElementById('p_commRate').value);
       t.stampDuty = Number(document.getElementById('p_stampDuty').value);
       t.slippage = Number(document.getElementById('p_slippage').value);
@@ -1114,7 +1233,7 @@
       return `${d.getFullYear()}-${m}-${dd} (周)`;
     }
 
-    // ================= 量化回测核心引擎 (全面重构：支持动态持仓均价追踪与强制止损) =================
+    // ================= 量化回测核心引擎 =================
     function runBacktest() {
       const t = getCurrentTask();
       if (!t.rawPrices || t.rawPrices.length === 0) return alert("请先导入数据或载入模拟数据！");
@@ -1131,19 +1250,22 @@
         return;
       }
 
+      let sortedPrices = [...prices].sort((a,b) => a - b);
+      let optimalLower = sortedPrices[Math.floor(sortedPrices.length * 0.1)];
+      let optimalUpper = sortedPrices[Math.floor(sortedPrices.length * 0.9)];
+
       document.getElementById('pb-start-date').value = toISODate(dates[0]);
       document.getElementById('pb-end-date').value = toISODate(dates[dates.length - 1]);
 
-      const getTargetSell = (buyP) => t.gridMode === 'arithmetic' ? buyP + t.gridGap : buyP * (1 + t.gridGap/100);
-      const getTargetBuy = (anchorP) => t.gridMode === 'arithmetic' ? anchorP - t.gridGap : anchorP * (1 - t.gridGap/100);
+      const getTargetSell = (buyP, gap) => t.gridMode === 'arithmetic' ? buyP + gap : buyP * (1 + gap/100);
+      const getTargetBuy = (anchorP, gap) => t.gridMode === 'arithmetic' ? anchorP - gap : anchorP * (1 - gap/100);
 
       let lots = []; let numLots = Math.floor(totalShares / t.sharesPerGrid); let remainder = totalShares % t.sharesPerGrid;
       let ancientDateMs = 0; 
-      for(let i=0; i<numLots; i++) lots.push({ buyPrice: startPrice, targetSell: getTargetSell(startPrice), shares: t.sharesPerGrid, date: ancientDateMs, t1Blocked: false });
-      if (remainder > 0) lots.push({ buyPrice: startPrice, targetSell: getTargetSell(startPrice), shares: remainder, date: ancientDateMs, t1Blocked: false });
+      for(let i=0; i<numLots; i++) lots.push({ buyPrice: startPrice, targetSell: getTargetSell(startPrice, t.gridGap), shares: t.sharesPerGrid, date: ancientDateMs, t1Blocked: false });
+      if (remainder > 0) lots.push({ buyPrice: startPrice, targetSell: getTargetSell(startPrice, t.gridGap), shares: remainder, date: ancientDateMs, t1Blocked: false });
 
       let ledger = []; let equityCurve = []; let drawdownCurve = []; let executionHistory = []; 
-      // 动态止损曲线追踪
       let avgCostCurve = []; let stopLossCurve = []; let closePriceCurve = [];
       
       let peakEquity = 0; let outOfBoundsCount = 0; let strandedCount = 0; let totalFee = 0; let gridProfit = 0; let pairsCompleted = 0;
@@ -1151,6 +1273,8 @@
 
       let dynamicUpper = t.upperBound; let dynamicLower = t.lowerBound; let isTradingStopped = false;
       let isStopLossTriggered = false; let slDate = null; let slTriggerPrice = null;
+      let stopLossRealizedLoss = 0; 
+      let lastBlockedPrice = null;
       
       let totalVol = 0;
       for(let i=1; i<prices.length; i++) totalVol += Math.abs(prices[i] - prices[i-1]) / prices[i-1];
@@ -1173,39 +1297,54 @@
             totalShares -= shares; 
             virtualCash += (turnover - fee);
             realized = turnover - fee - costBasis; 
-            gridProfit += realized; 
-            pairsCompleted += relatedLots.length; 
+            
+            if (isStopLoss) {
+                stopLossRealizedLoss += realized; 
+            } else {
+                gridProfit += realized; 
+                pairsCompleted += relatedLots.length; 
+            }
         }
         
         let lotInfo = '';
         if (isStopLoss) lotInfo = `<span class="text-red-600 font-bold">🚨 触及动态防爆线(¥${dynamicSlPrice.toFixed(2)})，均价(¥${dynamicAvgCost.toFixed(2)})，斩仓全平</span>`;
         else lotInfo = action === 'BUY' ? `新建锚点: ¥${price.toFixed(2)}` : `覆盖 ${relatedLots.length} 批次`;
-        ledger.push({ step: stepIdx, time: dtStr, action, price, shares, turnover, fee, realized, layer: lotInfo, isDelayedSell, isStopLoss });
+        
+        let currentCostBasisForLedger = lots.reduce((c, l) => c + l.buyPrice * l.shares, 0);
+        if (action === 'BUY') currentCostBasisForLedger += price * shares;
+        else if (action === 'SELL' && !isStopLoss) currentCostBasisForLedger -= costBasis;
+        if (isStopLoss) currentCostBasisForLedger = 0;
+
+        ledger.push({ 
+            step: stepIdx, time: dtStr, action, price, shares, turnover, fee, realized, layer: lotInfo, 
+            isDelayedSell, isStopLoss, 
+            postShares: totalShares, postUtilized: currentCostBasisForLedger 
+        });
       };
 
       for(let step = 0; step < prices.length; step++) {
         let currentP = prices[step]; let dt = dates[step]; let currentDayMs = getDayStartMs(dt); 
-        let utilizedCapital = totalShares * currentP; 
         
-        // --- 动态计算当前时刻的“剥离利润后的纯真实持仓均价” ---
         let totalCostBasis = lots.reduce((c, l) => c + l.buyPrice * l.shares, 0);
+        let utilizedCapital = totalCostBasis; 
+        
         let currentAvgCost = totalShares > 0 ? (totalCostBasis / totalShares) : null;
         let currentSlPrice = currentAvgCost !== null ? currentAvgCost * (1 - t.stopLossPercent / 100) : null;
         
-        avgCostCurve.push(currentAvgCost);
-        stopLossCurve.push(currentSlPrice);
-        closePriceCurve.push(currentP);
+        avgCostCurve.push(currentAvgCost); stopLossCurve.push(currentSlPrice); closePriceCurve.push(currentP);
         
-        let currentVirtualEquity = virtualCash + utilizedCapital; 
+        let currentMarketValue = totalShares * currentP;
+        let currentFloatProfit = currentMarketValue - totalCostBasis;
+        let currentVirtualEquity = hardCap + currentFloatProfit + gridProfit + stopLossRealizedLoss; 
+        
         equityCurve.push(currentVirtualEquity);
         if (currentVirtualEquity > peakEquity) peakEquity = currentVirtualEquity;
         let dd = peakEquity > 0 ? ((peakEquity - currentVirtualEquity) / peakEquity) * 100 : 0;
         drawdownCurve.push(parseFloat(dd.toFixed(2)));
 
         if (step > 0) {
-          if (isTradingStopped) { executionHistory.push({ utilized: utilizedCapital, totalShares, gridProfit }); continue; }
+          if (isTradingStopped) { executionHistory.push({ utilized: totalCostBasis, totalShares, gridProfit, slLoss: stopLossRealizedLoss }); continue; }
 
-          // --- 核心升级：基于动态均价的强平止损逻辑 ---
           if (t.useStopLoss && totalShares > 0 && currentSlPrice !== null && currentP <= currentSlPrice) {
               let cost = totalCostBasis;
               executeTrade('SELL', currentP, totalShares, cost, dt, step, lots, false, true, currentSlPrice, currentAvgCost);
@@ -1215,7 +1354,7 @@
               isStopLossTriggered = true;
               slDate = dt;
               slTriggerPrice = currentP;
-              executionHistory.push({ utilized: 0, totalShares: 0, gridProfit });
+              executionHistory.push({ utilized: 0, totalShares: 0, gridProfit, slLoss: stopLossRealizedLoss });
               continue; 
           }
 
@@ -1238,28 +1377,53 @@
             let isDelayedSell = sellLots.some(l => l.t1Blocked); 
             executeTrade('SELL', currentP, sharesToSell, cost, dt, step, sellLots, isDelayedSell);
             actionTaken = true;
+            utilizedCapital = lots.reduce((c, l) => c + l.buyPrice * l.shares, 0);
             if (t.strategyMode === 'conservative' && totalShares === 0) isTradingStopped = true;
           }
 
           if (inRange && !isTradingStopped) {
             let isZeroPosition = (totalShares === 0);
+            
+            let effectiveGap = t.gridGap;
+            let capitalUsageRatio = utilizedCapital / hardCap;
+            
+            if (t.gapMultiplier == 2 && capitalUsageRatio > 0.5) {
+                effectiveGap = t.gridGap * 2;
+            } else if (t.gapMultiplier == 3) {
+                if (capitalUsageRatio > 0.75) effectiveGap = t.gridGap * 3;
+                else if (capitalUsageRatio > 0.5) effectiveGap = t.gridGap * 2;
+            }
+
             let requiredCash = currentP * t.sharesPerGrid; let estimatedFee = requiredCash * (t.commRate + t.slippage); let totalCost = requiredCash + estimatedFee;
-            let willExceedCap = (totalShares * currentP) + totalCost > hardCap;
+            let willExceedCap = (utilizedCapital + totalCost) > hardCap;
 
             if (isZeroPosition) {
-              if (!willExceedCap) { executeTrade('BUY', currentP, t.sharesPerGrid, 0, dt, step); lots.push({ buyPrice: currentP, targetSell: getTargetSell(currentP), shares: t.sharesPerGrid, date: currentDayMs, t1Blocked: false }); } 
-              else { outOfBoundsCount++; strandedCount++; }
+              if (!willExceedCap) { 
+                  executeTrade('BUY', currentP, t.sharesPerGrid, 0, dt, step); 
+                  lots.push({ buyPrice: currentP, targetSell: getTargetSell(currentP, effectiveGap), shares: t.sharesPerGrid, date: currentDayMs, t1Blocked: false }); 
+                  lastBlockedPrice = null;
+              } 
+              else { 
+                  if (lastBlockedPrice === null || currentP <= getTargetBuy(lastBlockedPrice, effectiveGap)) { outOfBoundsCount++; strandedCount++; lastBlockedPrice = currentP; }
+              }
             } 
             else if (!actionTaken) {
-              let lowestBuyPrice = Math.min(...lots.map(l => l.buyPrice)); let targetBuyLevel = getTargetBuy(lowestBuyPrice);
+              let lowestBuyPrice = Math.min(...lots.map(l => l.buyPrice)); let targetBuyLevel = getTargetBuy(lowestBuyPrice, effectiveGap);
               if (currentP <= targetBuyLevel) {
-                if (!willExceedCap) { executeTrade('BUY', currentP, t.sharesPerGrid, 0, dt, step); lots.push({ buyPrice: currentP, targetSell: getTargetSell(currentP), shares: t.sharesPerGrid, date: currentDayMs, t1Blocked: false }); } 
-                else { outOfBoundsCount++; strandedCount++; }
+                if (!willExceedCap) { 
+                    executeTrade('BUY', currentP, t.sharesPerGrid, 0, dt, step); 
+                    lots.push({ buyPrice: currentP, targetSell: getTargetSell(currentP, effectiveGap), shares: t.sharesPerGrid, date: currentDayMs, t1Blocked: false }); 
+                    lastBlockedPrice = null;
+                } 
+                else { 
+                    if (lastBlockedPrice === null || currentP <= getTargetBuy(lastBlockedPrice, effectiveGap)) { outOfBoundsCount++; strandedCount++; lastBlockedPrice = currentP; }
+                }
               }
             }
           }
         }
-        executionHistory.push({ utilized: totalShares * currentP, totalShares, gridProfit });
+        
+        executionHistory.push({ utilized: lots.reduce((c, l) => c + l.buyPrice * l.shares, 0), totalShares, gridProfit, slLoss: stopLossRealizedLoss });
       }
 
       let maxDDVal = 0; let maxDDIndex = 0; let maxEqVal = -Infinity; let maxEqIndex = 0;
@@ -1286,10 +1450,10 @@
       let stdDR = Math.sqrt(dailyReturns.reduce((sq, n)=>sq + Math.pow(n - meanDR, 2), 0) / dailyReturns.length);
       let barsPerYear = prices.length / years; let sharpe = stdDR === 0 ? 0 : (meanDR - 0.02/barsPerYear) / stdDR * Math.sqrt(barsPerYear);
 
-      let floatProfit = (finalAsset - hardCap) - gridProfit;
+      let floatProfit = (finalAsset - hardCap) - gridProfit - stopLossRealizedLoss; 
       
-      let extMaxDD = { date: dates[maxDDIndex], val: maxDDVal, gridProfit: executionHistory[maxDDIndex].gridProfit, floatProfit: equityCurve[maxDDIndex] - hardCap - executionHistory[maxDDIndex].gridProfit, equity: equityCurve[maxDDIndex] };
-      let extMaxProfit = { date: dates[maxEqIndex], val: equityCurve[maxEqIndex] - hardCap, gridProfit: executionHistory[maxEqIndex].gridProfit, floatProfit: equityCurve[maxEqIndex] - hardCap - executionHistory[maxEqIndex].gridProfit, equity: equityCurve[maxEqIndex] };
+      let extMaxDD = { date: dates[maxDDIndex], val: maxDDVal, gridProfit: executionHistory[maxDDIndex].gridProfit, floatProfit: equityCurve[maxDDIndex] - hardCap - executionHistory[maxDDIndex].gridProfit - (executionHistory[maxDDIndex].slLoss || 0), equity: equityCurve[maxDDIndex] };
+      let extMaxProfit = { date: dates[maxEqIndex], val: equityCurve[maxEqIndex] - hardCap, gridProfit: executionHistory[maxEqIndex].gridProfit, floatProfit: equityCurve[maxEqIndex] - hardCap - executionHistory[maxEqIndex].gridProfit - (executionHistory[maxEqIndex].slLoss || 0), equity: equityCurve[maxEqIndex] };
 
       let finalUtilized = executionHistory[executionHistory.length - 1].utilized; let finalShares = totalShares; let finalPositionValue = totalShares * prices[prices.length - 1];
 
@@ -1309,16 +1473,17 @@
 
       t.report = {
         equityCurve, drawdownCurve, dates, ledger, history: executionHistory,
-        avgCostCurve, stopLossCurve, closePriceCurve, // 传入供图表渲染
+        avgCostCurve, stopLossCurve, closePriceCurve, 
         initialAsset: hardCap, finalAsset, finalCash: finalUtilized, finalShares, finalPositionValue,
         totalReturn: totalReturn * 100, annualizedReturn, maxDrawdown, sharpe,
         pairsCompleted, strandedCount, outOfBoundsCount, t1BlockCount, t1Events,
         gridProfit, floatProfit, totalFee, lots, utilization, extremePoints: { maxDD: extMaxDD, maxProfit: extMaxProfit },
-        avgDailyVol, isStopLossTriggered, slDate, slTriggerPrice
+        avgDailyVol, isStopLossTriggered, slDate, slTriggerPrice, stopLossRealizedLoss,
+        optimalRange: { lower: optimalLower, upper: optimalUpper } 
       };
 
       state.hasRunPortfolio = false;
-      renderReportUI(); renderEvaluationUI(); renderLedger(); initPlayback(); switchTab('playback');
+      renderReportUI(); renderEvaluationUI(); renderLedger(); initPlayback(); switchTab('report');
     }
 
     // ================= 单标的 UI 渲染模块 =================
@@ -1396,7 +1561,7 @@
         playbackChartObj.data.labels.push(r.dates[idx]);
         playbackChartObj.data.datasets[0].data.push(t.rawPrices[idx]);
         let events = r.ledger.filter(l => l.step === idx); let buyPoint = null, sellPoint = null, oPoint = null;
-        events.forEach(e => { if(e.action === 'BUY') buyPoint = t.rawPrices[idx]; if(e.action === 'SELL') { sellPoint = t.rawPrices[idx]; if (e.isDelayedSell) oPoint = t.rawPrices[idx]; } });
+        events.forEach(e => { if(e.action === 'BUY') buyPoint = t.rawPrices[idx]; if(e.action === 'SELL' && !e.isStopLoss) { sellPoint = t.rawPrices[idx]; if (e.isDelayedSell) oPoint = t.rawPrices[idx]; } });
         let t1Point = null; if (r.t1Events.some(e => e.step === idx)) t1Point = t.rawPrices[idx];
         playbackChartObj.data.datasets[1].data.push(buyPoint); playbackChartObj.data.datasets[2].data.push(sellPoint); playbackChartObj.data.datasets[3].data.push(t1Point); playbackChartObj.data.datasets[4].data.push(oPoint);
         let h = r.history[idx];
@@ -1418,7 +1583,7 @@
           slBannerHtml = `
             <div class="col-span-full bg-red-100 dark:bg-red-900/30 border border-red-300 dark:border-red-800 p-4 rounded-xl flex items-center font-bold text-red-700 dark:text-red-400 shadow-sm mb-4">
               <i data-lucide="siren" class="w-5 h-5 mr-3 animate-pulse shrink-0"></i> 
-              ⚠️ 极端风控熔断：该标的于 ${r.slDate} 跌破动态持仓均价的止损死线，触发价格 (¥${r.slTriggerPrice.toFixed(2)})，已强制执行清仓！后续已永久停止该标的的交易网格并锁定真实断腕亏损。
+              ⚠️ 极端风控熔断：该标的于 ${r.slDate} 跌破动态持仓均价止损线，触发斩仓价 (¥${r.slTriggerPrice.toFixed(2)})！后续已永久停止交易并锁定账面实亏。
             </div>
           `;
       }
@@ -1439,9 +1604,27 @@
       document.getElementById('ext_up_date').innerText = ext.maxProfit.date; document.getElementById('ext_up_val').innerText = `+¥${ext.maxProfit.val.toLocaleString('zh-CN', {minimumFractionDigits:2, maximumFractionDigits:2})}`; document.getElementById('ext_up_gridProfit').innerText = `+¥${ext.maxProfit.gridProfit.toLocaleString('zh-CN', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
       let floatSignUP = ext.maxProfit.floatProfit >= 0 ? '+' : ''; let floatColorUP = ext.maxProfit.floatProfit >= 0 ? 'text-red-500' : 'text-green-500';
       document.getElementById('ext_up_floatProfit').innerText = `${floatSignUP}¥${ext.maxProfit.floatProfit.toLocaleString('zh-CN', {minimumFractionDigits:2, maximumFractionDigits:2})}`; document.getElementById('ext_up_floatProfit').className = `font-mono font-bold ${floatColorUP}`; document.getElementById('ext_up_equity').innerText = `¥${ext.maxProfit.equity.toLocaleString('zh-CN', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
-      document.getElementById('r_finalAsset').innerText = `¥${r.finalAsset.toLocaleString('zh-CN', {minimumFractionDigits:2, maximumFractionDigits:2})}`; document.getElementById('r_finalCash').innerText = `¥${r.finalCash.toLocaleString('zh-CN', {minimumFractionDigits:2, maximumFractionDigits:2})}`; document.getElementById('r_finalShares').innerText = r.finalShares; document.getElementById('r_finalPosition').innerText = `¥${r.finalPositionValue.toLocaleString('zh-CN', {minimumFractionDigits:2, maximumFractionDigits:2})}`; document.getElementById('r_gridProfit').innerText = `+¥${r.gridProfit.toLocaleString('zh-CN', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
-      let floatSign = r.floatProfit >= 0 ? '+' : ''; let floatColor = r.floatProfit >= 0 ? 'text-red-500' : 'text-green-500'; document.getElementById('r_floatProfit').innerText = `${floatSign}¥${r.floatProfit.toLocaleString('zh-CN', {minimumFractionDigits:2, maximumFractionDigits:2})}`; document.getElementById('r_floatProfit').className = `font-mono font-bold ${floatColor}`;
-      document.getElementById('r_totalFee').innerText = `¥${r.totalFee.toLocaleString('zh-CN', {minimumFractionDigits:2, maximumFractionDigits:2})}`; document.getElementById('r_feeRatio').innerText = r.gridProfit > 0 ? `${((r.totalFee / r.gridProfit) * 100).toFixed(2)}%` : '0.00%';
+      
+      document.getElementById('r_finalAsset').innerText = `¥${r.finalAsset.toLocaleString('zh-CN', {minimumFractionDigits:2, maximumFractionDigits:2})}`; document.getElementById('r_finalCash').innerText = `¥${r.finalCash.toLocaleString('zh-CN', {minimumFractionDigits:2, maximumFractionDigits:2})}`; document.getElementById('r_finalShares').innerText = r.finalShares; document.getElementById('r_finalPosition').innerText = `¥${r.finalPositionValue.toLocaleString('zh-CN', {minimumFractionDigits:2, maximumFractionDigits:2})}`; 
+      
+      let pnlHtml = `
+        <div class="flex justify-between items-center"><span class="text-slate-500">网格波段净利润 (未含止损)</span><span class="font-mono font-bold text-blue-600 dark:text-blue-400 text-base" id="r_gridProfit">+¥${r.gridProfit.toLocaleString('zh-CN', {minimumFractionDigits:2, maximumFractionDigits:2})}</span></div>
+      `;
+      if (r.isStopLossTriggered) {
+         pnlHtml += `
+            <div class="flex justify-between items-center mt-1"><span class="text-slate-500">持仓底仓浮动盈亏</span><span class="font-mono font-bold text-slate-400">¥0.00 (已平仓)</span></div>
+            <div class="flex justify-between items-center mt-1"><span class="text-red-600 dark:text-red-500 font-bold">极端止损斩仓实亏</span><span class="font-mono font-bold text-red-600 dark:text-red-500 text-base">-¥${Math.abs(r.stopLossRealizedLoss).toLocaleString('zh-CN', {minimumFractionDigits:2, maximumFractionDigits:2})}</span></div>
+         `;
+      } else {
+         let floatSign = r.floatProfit >= 0 ? '+' : ''; let floatColor = r.floatProfit >= 0 ? 'text-red-500' : 'text-green-500';
+         pnlHtml += `<div class="flex justify-between items-center mt-1"><span class="text-slate-500">持仓底仓浮动盈亏</span><span class="font-mono font-bold ${floatColor}">${floatSign}¥${r.floatProfit.toLocaleString('zh-CN', {minimumFractionDigits:2, maximumFractionDigits:2})}</span></div>`;
+      }
+      pnlHtml += `
+        <div class="flex justify-between items-center mt-1 pt-3 border-t border-slate-100 dark:border-slate-700/50"><span class="text-slate-500">累计交易税费总额</span><span class="font-mono font-bold text-red-500">¥${r.totalFee.toLocaleString('zh-CN', {minimumFractionDigits:2, maximumFractionDigits:2})}</span></div>
+        <div class="flex justify-between items-center mt-1"><span class="text-slate-500">税费吃掉利润占比</span><span class="font-mono font-bold">${r.gridProfit > 0 ? ((r.totalFee / r.gridProfit) * 100).toFixed(2) : '0.00'}%</span></div>
+      `;
+      document.getElementById('pnl_structure_list').innerHTML = pnlHtml;
+      
       document.getElementById('r_completed').innerText = `${r.pairsCompleted} 批次`; document.getElementById('r_stranded').innerText = `${r.strandedCount} 次`; document.getElementById('r_t1Blocks').innerText = `${r.t1BlockCount} 次`; document.getElementById('r_outOfBounds').innerText = `${r.outOfBoundsCount} 次`;
     }
 
@@ -1451,24 +1634,29 @@
       document.getElementById('evalScoreText').innerText = score; const ring = document.getElementById('evalScoreRing'); ring.style.strokeDashoffset = 289 - (289 * score / 100); ring.className.baseVal = score >= 80 ? "text-red-500" : (score >= 60 ? "text-blue-500" : "text-green-500"); document.getElementById('evalScoreDesc').innerText = score >= 80 ? '单标的表现优异 (S级)' : (score >= 60 ? '单标的表现良好 (A级)' : '单标的存在高风险 (B级)');
       let diagHtml = ''; let feeRatio = r.gridProfit > 0 ? (r.totalFee / r.gridProfit) * 100 : 0;
       if (feeRatio > 20) diagHtml += `<li><span class="text-red-500 font-bold">⚠️ 摩擦成本警告：</span> 您的交易税费占网格利润的 ${feeRatio.toFixed(1)}%。</li>`; else diagHtml += `<li><span class="text-green-500 font-bold">✅ 摩擦成本健康：</span> 税费占利润的 ${feeRatio.toFixed(1)}%。</li>`;
-      if (r.extremePoints.maxDD.floatProfit < 0 && Math.abs(r.extremePoints.maxDD.floatProfit) > r.extremePoints.maxDD.gridProfit * 1.5) diagHtml += `<li><span class="text-orange-500 font-bold">⚠️ 风险垫被击穿：</span> 在最大回撤时期，股票浮亏远超网格利润积累。</li>`; else diagHtml += `<li><span class="text-green-500 font-bold">✅ 抗跌能力极强：</span> 即使在回撤期，网格利润依然能较好对冲底仓风险。</li>`;
+      if (!r.isStopLossTriggered && r.extremePoints.maxDD.floatProfit < 0 && Math.abs(r.extremePoints.maxDD.floatProfit) > r.extremePoints.maxDD.gridProfit * 1.5) diagHtml += `<li><span class="text-orange-500 font-bold">⚠️ 风险垫被击穿：</span> 在最大回撤时期，股票浮亏远超网格利润积累。</li>`; else if (!r.isStopLossTriggered) diagHtml += `<li><span class="text-green-500 font-bold">✅ 抗跌能力极强：</span> 即使在回撤期，网格利润依然能较好对冲底仓风险。</li>`;
       if (r.t1BlockCount > r.pairsCompleted * 0.3) diagHtml += `<li><span class="text-orange-500 font-bold">⚠️ T+1限制严重：</span> 发生 ${r.t1BlockCount} 次拦截，该标的日内波动极大但受制于T+1。</li>`;
-      if (r.outOfBoundsCount > 0) diagHtml += `<li><span class="text-red-500 font-bold">⚠️ 硬上限触顶阻断：</span> 系统因触及最高资金占用上限，导致 ${r.outOfBoundsCount} 次买入操作被强制拦截。</li>`;
-      if (r.isStopLossTriggered) diagHtml += `<li><span class="text-red-600 font-bold">🚨 已被系统强制熔断：</span> 因跌穿动态止损线，当前标的已物理平仓并停止交易！</li>`;
+      if (r.outOfBoundsCount > 0) diagHtml += `<li><span class="text-red-500 font-bold">⚠️ 资金短缺阻断：</span> 系统因触及硬上限或触发了动态间距防爆机制，导致 ${r.outOfBoundsCount} 笔预备买单被挂起拦截（注：此数字为错过子弹数，非拦截天数）。</li>`;
+      if (r.isStopLossTriggered) diagHtml += `<li><span class="text-red-600 font-bold">🚨 触发死线熔断：</span> 因跌穿动态止损线，该标的已强制物理平仓，彻底中止交易！</li>`;
       document.getElementById('evalDiagnosis').innerHTML = diagHtml || '<li>暂无明显异常诊断。</li>';
-      let advHtml = ''; if (feeRatio > 20) advHtml += `<li>👉 尝试将 [每格幅度] 调大，减少无效换手。</li>`; if (r.outOfBoundsCount > 0) advHtml += `<li>👉 <strong class="text-indigo-600">提高硬上限额度：</strong> 如果希望继续买入，请去【策略配置】里将硬上限调高。</li>`; if (r.t1BlockCount > r.pairsCompleted * 0.3) advHtml += `<li>👉 建议提高利润目标；或更换支持 T+0 的 ETF。</li>`; document.getElementById('evalAdvice').innerHTML = advHtml || '<li>👉 当前标的适配良好，建议保持。</li>';
+      let advHtml = ''; 
+      
+      if(r.optimalRange) {
+        advHtml += `<li><span class="text-blue-500 font-bold">📊 核心价值中枢标定：</span> 系统提取全部历史走势，发现该标的 <strong>80% 的时间</strong> 运行在 <strong class="text-blue-600">¥${r.optimalRange.lower.toFixed(2)} ~ ¥${r.optimalRange.upper.toFixed(2)}</strong>。强烈建议将【初始网格下限和上限】设在此区间，避免在超高位被套或极寒区打光子弹。</li>`;
+      }
+      
+      if (feeRatio > 20) advHtml += `<li>👉 尝试将 [每格幅度] 调大，减少无效换手。</li>`; if (r.outOfBoundsCount > 0) advHtml += `<li>👉 <strong class="text-indigo-600">利用防套牢机制：</strong> 您的资金不够打完全程，目前系统已开启深度防御（间距拉宽）保护剩余资金。</li>`; if (r.t1BlockCount > r.pairsCompleted * 0.3) advHtml += `<li>👉 建议提高利润目标；或更换支持 T+0 的 ETF。</li>`; 
+      document.getElementById('evalAdvice').innerHTML = advHtml || '<li>👉 当前标的适配良好，建议保持。</li>';
     }
 
     function renderCharts() {
       const t = getCurrentTask(); const r = t.report; if(!r) return;
       const themeColor = state.isDark ? '#cbd5e1' : '#475569'; const gridColor = state.isDark ? 'rgba(51, 65, 85, 0.5)' : 'rgba(226, 232, 240, 0.8)';
       
-      // 1. 渲染回撤图
       if(drawdownChartObj) drawdownChartObj.destroy();
       const ddCtx = document.getElementById('drawdownChart').getContext('2d');
       drawdownChartObj = new Chart(ddCtx, { type: 'line', data: { labels: r.dates, datasets: [{ label: '动态回撤 %', data: r.drawdownCurve, borderColor: '#ef4444', backgroundColor: 'rgba(239, 68, 68, 0.3)', borderWidth: 1, pointRadius: 0, fill: true, stepped: true }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, zoom: { pan: { enabled: true, mode: 'x' }, zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'x' } } }, scales: { x: { display: false }, y: { reverse: true, grid: { color: gridColor }, ticks: { callback: v => v+'%', color: themeColor }, min: 0 } } } });
       
-      // 2. 渲染动态持仓成本与止损追踪图 (核心新增)
       if(stopLossChartObj) stopLossChartObj.destroy();
       const slCtx = document.getElementById('stopLossChart').getContext('2d');
       stopLossChartObj = new Chart(slCtx, {
@@ -1538,15 +1726,40 @@
 
     function renderLedger() {
       const r = getCurrentTask().report; if(!r) return; let html = '';
+      
+      document.querySelector('#tab-ledger thead').innerHTML = `
+        <tr>
+          <th class="py-3 px-4 font-medium text-left">触发时间 (行情对应)</th>
+          <th class="py-3 px-4 font-medium text-center">交易方向</th>
+          <th class="py-3 px-4 font-medium">执行单价</th>
+          <th class="py-3 px-4 font-medium">成交量</th>
+          <th class="py-3 px-4 font-medium text-blue-500">当前持仓股数</th>
+          <th class="py-3 px-4 font-medium text-orange-500">当前占用金额</th>
+          <th class="py-3 px-4 font-medium text-red-500">单笔摩擦损耗</th>
+          <th class="py-3 px-4 font-medium text-blue-500">该批次落袋利润</th>
+          <th class="py-3 px-4 font-medium text-left">备注 / 关联记录</th>
+        </tr>
+      `;
+      
       r.ledger.forEach(l => { 
         let isBuy = l.action === 'BUY'; 
         let layerHtml = l.isStopLoss ? l.layer : (l.isDelayedSell ? `<span class="text-blue-500 font-bold mr-1" title="摆脱T+1后的延迟卖出">[O]</span>${l.layer}` : l.layer); 
-        html += `<tr class="hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-colors"><td class="py-3 px-4 text-left text-slate-500">${l.time}</td><td class="py-3 px-4 text-center font-bold ${isBuy?'text-green-500':'text-red-500'}">${isBuy?'买入':'卖出'}</td><td class="py-3 px-4 font-bold dark:text-slate-200">¥${l.price.toFixed(2)}</td><td class="py-3 px-4 text-slate-500">${l.shares}</td><td class="py-3 px-4 text-slate-500">¥${l.turnover.toLocaleString('zh-CN', {maximumFractionDigits:0})}</td><td class="py-3 px-4 text-slate-400 text-[11px]">¥${l.fee.toFixed(2)}</td><td class="py-3 px-4 font-bold ${l.realized>0?'text-blue-500':'text-slate-300'}">${l.realized>0?'+¥'+l.realized.toFixed(2):'--'}</td><td class="py-3 px-4 text-left text-xs text-slate-400">${layerHtml}</td></tr>`; 
+        html += `<tr class="hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-colors">
+            <td class="py-3 px-4 text-left text-slate-500">${l.time}</td>
+            <td class="py-3 px-4 text-center font-bold ${isBuy?'text-green-500':'text-red-500'}">${isBuy?'买入':'卖出'}</td>
+            <td class="py-3 px-4 font-bold dark:text-slate-200">¥${l.price.toFixed(2)}</td>
+            <td class="py-3 px-4 text-slate-500">${l.shares}</td>
+            <td class="py-3 px-4 font-bold text-blue-500/80 dark:text-blue-400/80">${l.postShares} 股</td>
+            <td class="py-3 px-4 font-bold text-orange-500/80 dark:text-orange-400/80">¥${l.postUtilized.toLocaleString('zh-CN', {maximumFractionDigits:0})}</td>
+            <td class="py-3 px-4 text-red-500 text-[11px] font-bold">-¥${l.fee.toFixed(2)}</td>
+            <td class="py-3 px-4 font-bold ${l.realized>0?'text-blue-500':'text-slate-300'}">${l.realized>0?'+¥'+l.realized.toFixed(2):'--'}</td>
+            <td class="py-3 px-4 text-left text-xs text-slate-400">${layerHtml}</td>
+          </tr>`; 
       });
       document.getElementById('ledgerTable').innerHTML = html; document.getElementById('ledgerCount').innerText = `${r.ledger.length} 笔交易`;
     }
 
-    // ================= 全局组合监控 (核动力极速精算) =================
+    // ================= 全局组合监控 =================
     function renderPortfolioChart() {
       const globalPoolStr = document.getElementById('port_pool_size').value;
       const globalPool = parseFloat(globalPoolStr) || 600000;
@@ -1570,9 +1783,9 @@
         readyTasks.forEach(t => {
           if (t._dateIndexMap.has(dt)) {
             let idx = t._dateIndexMap.get(dt);
-            let used = t.report.history[idx].utilized;
-            totalUsedToday += used;
-            t._lastPos = used;
+            let h = t.report.history[idx];
+            totalUsedToday += h.utilized;
+            t._lastPos = h.utilized;
           } else { totalUsedToday += t._lastPos; }
         });
         let utilRatio = (totalUsedToday / globalPool) * 100;
@@ -1618,6 +1831,7 @@
 
       let totalGridProfit = 0;
       let totalFloatProfit = 0;
+      let totalStopLossLoss = 0; 
       let globalPairs = 0;
       let tableHtml = '';
       let paramAdviceHtml = '';
@@ -1627,10 +1841,11 @@
         let r = t.report;
         totalGridProfit += r.gridProfit;
         totalFloatProfit += r.floatProfit;
+        if (r.stopLossRealizedLoss) totalStopLossLoss += r.stopLossRealizedLoss; 
+        
         globalPairs += r.pairsCompleted;
         let avgPairProfit = r.pairsCompleted > 0 ? (r.gridProfit / r.pairsCompleted) : 0;
 
-        // 渲染横向对比表格
         tableHtml += `
           <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-colors">
             <td class="py-3 px-6 font-bold text-left text-slate-800 dark:text-white">${t.name}</td>
@@ -1642,20 +1857,23 @@
           </tr>
         `;
 
-        // 生成 AI 参数调优建议
         let isGapTooSmall = t.gridGap > 0 && r.avgDailyVol > (t.gridGap * 1.5);
         let isGapTooLarge = t.gridGap > 0 && r.avgDailyVol < (t.gridGap * 0.5);
-        let paramMsg = `对于 <strong class="text-indigo-600 dark:text-indigo-400">[${t.name}]</strong>：`;
+        
+        let paramMsg = `<strong class="text-indigo-600 dark:text-indigo-400">[${t.name}]</strong>: `;
+        if (r.optimalRange) {
+          paramMsg += `系统算出其 80% 时间运行核心区间为 <strong class="text-slate-800 dark:text-white">¥${r.optimalRange.lower.toFixed(2)} ~ ¥${r.optimalRange.upper.toFixed(2)}</strong>，建议将网格上下限卡死在此区间内！`;
+        }
+
         if (isGapTooSmall) {
-          paramMsg += `当前网格间距(${t.gridGap}%)远小于其日均振幅(${r.avgDailyVol.toFixed(2)}%)，极易造成无效的高频摩擦和踏空。建议将网格步长调大至 <strong class="text-red-500">${(r.avgDailyVol * 0.8).toFixed(1)}% ~ ${(r.avgDailyVol * 1.2).toFixed(1)}%</strong> 以实现利润最大化。`;
+          paramMsg += `当前网格间距(${t.gridGap}%)远小于日均振幅(${r.avgDailyVol.toFixed(2)}%)，建议调大至 <strong class="text-red-500">${(r.avgDailyVol * 0.8).toFixed(1)}% ~ ${(r.avgDailyVol * 1.2).toFixed(1)}%</strong>。`;
         } else if (isGapTooLarge) {
-          paramMsg += `当前网格间距(${t.gridGap}%)过大，标的日均振幅仅为 ${r.avgDailyVol.toFixed(2)}%，网格常年无法触发闭环。建议将间距调窄至 <strong class="text-blue-500">${(r.avgDailyVol * 0.8).toFixed(1)}%</strong> 左右。`;
+          paramMsg += `当前网格间距(${t.gridGap}%)过大，建议调窄至 <strong class="text-blue-500">${(r.avgDailyVol * 0.8).toFixed(1)}%</strong> 左右。`;
         } else {
-          paramMsg += `当前网格间距(${t.gridGap}%)与标的日均振幅(${r.avgDailyVol.toFixed(2)}%)完美契合！吃到了绝大多数的震荡红利，无需修改。`;
+          paramMsg += `当前网格间距(${t.gridGap}%)与振幅契合，吃到了绝大多数红利。`;
         }
         paramAdviceHtml += `<li>👉 ${paramMsg}</li>`;
 
-        // 动态防爆风控确认
         let statusMsg = t.useStopLoss ? `<strong class="text-green-500">已开启 (${t.stopLossPercent}%)</strong>` : `<strong class="text-red-500">未开启 (裸奔)</strong>`;
         stopLossAdviceHtml += `
           <li class="bg-white/50 dark:bg-slate-900/30 p-4 rounded-xl border border-red-100 dark:border-red-900/50">
@@ -1670,7 +1888,7 @@
         `;
       });
 
-      let totalNetProfit = totalGridProfit + totalFloatProfit;
+      let totalNetProfit = totalGridProfit + totalFloatProfit + totalStopLossLoss; 
       let globalAvgPairProfit = globalPairs > 0 ? (totalGridProfit / globalPairs) : 0;
 
       document.getElementById('global_total_profit').innerText = `¥${totalNetProfit.toLocaleString('zh-CN', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
