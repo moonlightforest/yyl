@@ -182,18 +182,10 @@
         </div>
     </div>
 
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, getDoc, setDoc, updateDoc, onSnapshot, collection, addDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-
-        // --- Firebase Setup ---
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
+    <script>
+        // --- State Management & Local Storage (实时本地记忆) ---
+        const STORAGE_KEY = 'anti_procrastination_save_data';
         
-        let auth, db, userId;
-
-        // --- State Management ---
         let state = {
             level: 1,
             exp: 0,
@@ -201,6 +193,23 @@
             tasks: [],
             totalCompleted: 0
         };
+
+        // 核心：读取本地记忆
+        function loadState() {
+            const saved = localStorage.getItem(STORAGE_KEY);
+            if (saved) {
+                try {
+                    state = JSON.parse(saved);
+                } catch (e) {
+                    console.error("记忆读取失败", e);
+                }
+            }
+        }
+
+        // 核心：写入本地记忆
+        function saveState() {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        }
 
         const quotes = [
             "先上链接后精修，烂草稿也胜过零。",
@@ -227,28 +236,23 @@
         async function initAudio() {
             if (synthsReady) return;
             await Tone.start();
-            
-            // Short, satisfying 'pop' or 'ding' for checking a task
             popSynth = new Tone.PolySynth(Tone.Synth, {
                 oscillator: { type: "sine" },
                 envelope: { attack: 0.01, decay: 0.1, sustain: 0.1, release: 1 }
             }).toDestination();
             popSynth.volume.value = -10;
 
-            // Triumphant chord for level up
             levelUpSynth = new Tone.PolySynth(Tone.Synth, {
                 oscillator: { type: "triangle" },
                 envelope: { attack: 0.05, decay: 0.2, sustain: 0.4, release: 1.5 }
             }).toDestination();
             levelUpSynth.volume.value = -5;
-
             synthsReady = true;
         }
 
         function playPopSound() {
             if (!synthsReady) initAudio();
             if (synthsReady) {
-                // Play a quick upward interval
                 const now = Tone.now();
                 popSynth.triggerAttackRelease("E5", "8n", now);
                 popSynth.triggerAttackRelease("G5", "8n", now + 0.1);
@@ -282,12 +286,11 @@
             constructor(x, y, color) {
                 this.x = x;
                 this.y = y;
-                // Burst velocity
                 const angle = Math.random() * Math.PI * 2;
                 const speed = Math.random() * 8 + 2;
                 this.vx = Math.cos(angle) * speed;
                 this.vy = Math.sin(angle) * speed;
-                this.life = 1.0; // 1.0 to 0.0
+                this.life = 1.0; 
                 this.decay = Math.random() * 0.02 + 0.02;
                 this.color = color;
                 this.size = Math.random() * 4 + 2;
@@ -308,7 +311,7 @@
         }
 
         function spawnParticles(x, y, count = 30) {
-            const colors = ['59, 130, 246', '16, 185, 129', '250, 204, 21', '168, 85, 247']; // Blue, Green, Yellow, Purple
+            const colors = ['59, 130, 246', '16, 185, 129', '250, 204, 21', '168, 85, 247'];
             for (let i = 0; i < count; i++) {
                 const color = colors[Math.floor(Math.random() * colors.length)];
                 particles.push(new Particle(x, y, color));
@@ -345,10 +348,9 @@
                 emptyState.style.display = 'flex';
             } else {
                 emptyState.style.display = 'none';
-                // Sort tasks: uncompleted first, then newest first. completed at the bottom
                 const sortedTasks = [...state.tasks].sort((a, b) => {
                     if (a.completed === b.completed) {
-                        return (b.createdAt || 0) - (a.createdAt || 0);
+                        return b.createdAt - a.createdAt;
                     }
                     return a.completed ? 1 : -1;
                 });
@@ -384,15 +386,12 @@
         }
 
         function triggerLevelUpVisuals() {
-            // Level Up Visuals & Audio
             playLevelUpSound();
             spawnParticles(window.innerWidth / 2, window.innerHeight / 2, 200);
             
-            // Add glowing animation to container
             const container = document.querySelector('.max-w-2xl');
             container.classList.add('level-up-anim');
             
-            // Big text notification
             const lvlUpText = document.createElement('div');
             lvlUpText.innerHTML = `LEVEL UP! <br><span class="text-2xl text-white">你已达到 Lv.${state.level}</span>`;
             lvlUpText.className = 'fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-6xl font-black text-yellow-400 text-center z-[10001] pointer-events-none drop-shadow-[0_0_20px_rgba(250,204,21,0.8)]';
@@ -408,92 +407,52 @@
             rotateQuote();
         }
 
-        async function completeTask(taskId, x, y) {
+        function completeTask(taskId, x, y) {
             const task = state.tasks.find(t => t.id === taskId);
             if (task && !task.completed) {
-                // Initialize audio context on first user interaction if not done
                 initAudio();
-                
-                // Immediate visual & audio feedback
                 playPopSound();
                 spawnParticles(x, y, 40);
                 const expGained = 50 + Math.floor(Math.random() * 10);
                 spawnFloatingText(x, y - 20, `+${expGained} EXP`);
 
-                if (!userId) {
-                    // Fallback to local memory if no DB connection
-                    task.completed = true;
-                    state.totalCompleted++;
-                    state.exp += expGained;
-                    if (state.exp >= state.expNeeded) {
-                        state.exp -= state.expNeeded;
-                        state.level++;
-                        state.expNeeded = Math.floor(state.expNeeded * 1.5);
-                        triggerLevelUpVisuals();
-                    }
-                    renderTasks();
-                    updateUI();
-                    return;
+                task.completed = true;
+                state.totalCompleted++;
+                state.exp += expGained;
+                
+                if (state.exp >= state.expNeeded) {
+                    state.exp -= state.expNeeded;
+                    state.level++;
+                    state.expNeeded = Math.floor(state.expNeeded * 1.5);
+                    triggerLevelUpVisuals();
                 }
-
-                // Calculate new stats for Cloud Storage
-                let newExp = state.exp + expGained;
-                let newLevel = state.level;
-                let newExpNeeded = state.expNeeded;
-                let totalCompleted = state.totalCompleted + 1;
-
-                if (newExp >= newExpNeeded) {
-                    newExp = newExp - newExpNeeded;
-                    newLevel++;
-                    newExpNeeded = Math.floor(newExpNeeded * 1.5);
-                }
-
-                // Update Firestore (Optimistic UI handled by onSnapshot)
-                const taskRef = doc(db, 'artifacts', appId, 'users', userId, 'tasks', taskId);
-                updateDoc(taskRef, { completed: true });
-
-                const statsRef = doc(db, 'artifacts', appId, 'users', userId, 'stats', 'main');
-                updateDoc(statsRef, { 
-                    exp: newExp, 
-                    level: newLevel, 
-                    expNeeded: newExpNeeded,
-                    totalCompleted: totalCompleted
-                });
+                
+                saveState(); // 每次完成任务后保存
+                renderTasks();
+                updateUI();
 
             } else if (task && task.completed) {
-                if (userId) {
-                    const taskRef = doc(db, 'artifacts', appId, 'users', userId, 'tasks', taskId);
-                    updateDoc(taskRef, { completed: false });
-                } else {
-                    task.completed = false;
-                    renderTasks();
-                }
+                task.completed = false;
+                saveState(); // 每次取消任务后保存
+                renderTasks();
             }
         }
 
         // --- Event Listeners ---
-        taskForm.addEventListener('submit', async (e) => {
+        taskForm.addEventListener('submit', (e) => {
             e.preventDefault();
             const text = taskInput.value.trim();
             if (text) {
-                if (userId) {
-                    // Save to Cloud
-                    const tasksRef = collection(db, 'artifacts', appId, 'users', userId, 'tasks');
-                    await addDoc(tasksRef, { 
-                        text: text, 
-                        completed: false, 
-                        createdAt: Date.now() 
-                    });
-                } else {
-                    // Fallback local memory
-                    state.tasks.unshift({
-                        id: Date.now().toString(),
-                        text: text,
-                        completed: false,
-                        createdAt: Date.now()
-                    });
-                    renderTasks();
-                }
+                state.tasks.unshift({
+                    id: Date.now().toString(),
+                    text: text,
+                    completed: false,
+                    createdAt: Date.now()
+                });
+                
+                saveState(); // 每次添加新任务后保存
+                renderTasks();
+                
                 taskInput.value = '';
                 taskList.scrollTop = 0;
             }
@@ -502,7 +461,6 @@
         taskList.addEventListener('change', (e) => {
             if (e.target.classList.contains('game-checkbox')) {
                 const taskId = e.target.getAttribute('data-id');
-                // Get coordinates of the checkbox for particles
                 const rect = e.target.getBoundingClientRect();
                 const x = rect.left + rect.width / 2;
                 const y = rect.top + rect.height / 2;
@@ -511,80 +469,16 @@
             }
         });
 
-        // Any click on document can attempt to init audio
         document.addEventListener('click', initAudio, { once: true });
 
-        // --- Database Initialization & Cloud Sync ---
-        async function initApp() {
-            if (firebaseConfig) {
-                const app = initializeApp(firebaseConfig);
-                auth = getAuth(app);
-                db = getFirestore(app);
-
-                try {
-                    // Authenticate User
-                    if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                        await signInWithCustomToken(auth, __initial_auth_token);
-                    } else {
-                        await signInAnonymously(auth);
-                    }
-                    
-                    userId = auth.currentUser?.uid;
-                    if (userId) {
-                        setupRealtimeListeners();
-                    }
-                } catch (error) {
-                    console.error("Cloud sync auth failed:", error);
-                    fallbackLocalInit();
-                }
-            } else {
-                fallbackLocalInit();
-            }
-        }
-
-        function setupRealtimeListeners() {
-            if (!userId || !db) return;
-            window.previousLevel = state.level;
-
-            // Listen to Stats (EXP & Level)
-            const statsRef = doc(db, 'artifacts', appId, 'users', userId, 'stats', 'main');
-            onSnapshot(statsRef, (docSnap) => {
-                if (docSnap.exists()) {
-                    const data = docSnap.data();
-                    state.level = data.level || 1;
-                    state.exp = data.exp || 0;
-                    state.expNeeded = data.expNeeded || 100;
-                    state.totalCompleted = data.totalCompleted || 0;
-                    
-                    // Trigger visual level up if level increased from cloud sync
-                    if (window.previousLevel && state.level > window.previousLevel) {
-                        triggerLevelUpVisuals();
-                    }
-                    window.previousLevel = state.level;
-                    updateUI();
-                } else {
-                    // Initialize cloud stats if new user
-                    setDoc(statsRef, { level: 1, exp: 0, expNeeded: 100, totalCompleted: 0 });
-                }
-            }, (error) => console.error("Stats sync error:", error));
-
-            // Listen to Tasks
-            const tasksRef = collection(db, 'artifacts', appId, 'users', userId, 'tasks');
-            onSnapshot(tasksRef, (snapshot) => {
-                state.tasks = [];
-                snapshot.forEach((doc) => {
-                    state.tasks.push({ id: doc.id, ...doc.data() });
-                });
-                renderTasks();
-            }, (error) => console.error("Tasks sync error:", error));
-        }
-
-        function fallbackLocalInit() {
+        // --- 初始化启动 ---
+        function initApp() {
+            loadState(); // 启动时读取记忆
             updateUI();
             renderTasks();
         }
 
-        // Boot up
+        // 启动应用
         initApp();
 
     </script>
