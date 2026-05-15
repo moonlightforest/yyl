@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>任务升级控制台 - 终结拖延</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0f172a; /* Tailwind slate-900 */
+            color: #f8fafc;
+            overflow-x: hidden;
+            user-select: none;
+        }
+
+        /* Canvas for particle effects, overlaid on everything but not blocking clicks */
+        #fx-canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            pointer-events: none;
+            z-index: 9999;
+        }
+
+        /* Custom scrollbar */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #1e293b; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb { background: #3b82f6; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #60a5fa; }
+
+        /* Glowing text effects */
+        .neon-text-blue { text-shadow: 0 0 10px rgba(59, 130, 246, 0.7); }
+        .neon-text-green { text-shadow: 0 0 10px rgba(16, 185, 129, 0.7); }
+        .neon-border { box-shadow: 0 0 15px rgba(59, 130, 246, 0.5); }
+
+        /* Task Item Animations */
+        .task-item {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .task-item:hover {
+            transform: translateX(5px);
+            background-color: #1e293b;
+            border-color: #3b82f6;
+        }
+        .task-item.completed {
+            opacity: 0.5;
+            text-decoration: line-through;
+            filter: grayscale(100%);
+            transform: scale(0.98);
+            border-color: #059669;
+        }
+
+        /* Checkbox styling */
+        .game-checkbox {
+            appearance: none;
+            background-color: #0f172a;
+            margin: 0;
+            font: inherit;
+            color: currentColor;
+            width: 1.5em;
+            height: 1.5em;
+            border: 2px solid #3b82f6;
+            border-radius: 0.35em;
+            display: grid;
+            place-content: center;
+            cursor: pointer;
+            transition: all 0.2s ease-in-out;
+        }
+        .game-checkbox::before {
+            content: "";
+            width: 0.85em;
+            height: 0.85em;
+            transform: scale(0);
+            transition: 120ms transform ease-in-out;
+            box-shadow: inset 1em 1em #10b981;
+            transform-origin: center;
+            clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0%, 43% 62%);
+        }
+        .game-checkbox:checked::before { transform: scale(1); }
+        .game-checkbox:checked {
+            border-color: #10b981;
+            background-color: rgba(16, 185, 129, 0.2);
+            box-shadow: 0 0 10px rgba(16, 185, 129, 0.5);
+        }
+
+        /* Floating text animation */
+        .floating-text {
+            position: absolute;
+            color: #10b981;
+            font-weight: 800;
+            font-size: 1.5rem;
+            pointer-events: none;
+            animation: floatUp 1s ease-out forwards;
+            text-shadow: 0 0 8px rgba(16, 185, 129, 0.8);
+            z-index: 10000;
+        }
+        @keyframes floatUp {
+            0% { transform: translateY(0) scale(1); opacity: 1; }
+            50% { transform: translateY(-30px) scale(1.2); opacity: 1; }
+            100% { transform: translateY(-60px) scale(1); opacity: 0; }
+        }
+
+        /* Level Up Animation */
+        @keyframes pulseGlow {
+            0% { box-shadow: 0 0 0 0 rgba(250, 204, 21, 0.7); }
+            70% { box-shadow: 0 0 0 20px rgba(250, 204, 21, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(250, 204, 21, 0); }
+        }
+        .level-up-anim { animation: pulseGlow 1s infinite; border-color: #facc15 !important; }
+    </style>
+</head>
+<body class="min-h-screen flex items-center justify-center p-4 sm:p-8">
+
+    <canvas id="fx-canvas"></canvas>
+
+    <div class="max-w-2xl w-full bg-slate-800 rounded-2xl shadow-2xl overflow-hidden neon-border flex flex-col h-[85vh]">
+        
+        <!-- Header / Status Bar -->
+        <div class="bg-slate-900 p-6 border-b border-slate-700 relative overflow-hidden">
+            <!-- Background decoration -->
+            <div class="absolute top-0 right-0 -mt-10 -mr-10 w-40 h-40 bg-blue-500 rounded-full blur-3xl opacity-10"></div>
+            
+            <div class="flex justify-between items-end mb-4">
+                <div>
+                    <h1 class="text-3xl font-extrabold tracking-tight text-white mb-1">
+                        主线任务 <span class="text-blue-400 neon-text-blue">LV.<span id="user-level">1</span></span>
+                    </h1>
+                    <p class="text-slate-400 text-sm font-medium" id="motivational-quote">"先上链接后精修，烂草稿也胜过零。"</p>
+                </div>
+                <div class="text-right">
+                    <div class="text-2xl font-bold text-emerald-400 neon-text-green" id="exp-display">0 / 100 EXP</div>
+                </div>
+            </div>
+
+            <!-- EXP Progress Bar -->
+            <div class="h-4 w-full bg-slate-700 rounded-full overflow-hidden shadow-inner relative">
+                <div id="exp-bar" class="h-full bg-gradient-to-r from-blue-500 to-emerald-400 w-0 transition-all duration-500 ease-out relative">
+                    <!-- Shine effect on bar -->
+                    <div class="absolute top-0 left-0 right-0 bottom-0 bg-white opacity-20" style="background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent); transform: skewX(-20deg); animation: shine 2s infinite;"></div>
+                </div>
+            </div>
+            <style>
+                @keyframes shine { 0% { left: -100%; } 100% { left: 200%; } }
+            </style>
+        </div>
+
+        <!-- Task Input Area -->
+        <div class="p-6 bg-slate-800/50 border-b border-slate-700">
+            <form id="task-form" class="flex gap-3">
+                <input type="text" id="task-input" 
+                    class="flex-1 bg-slate-900 text-white px-4 py-3 rounded-xl border border-slate-600 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors placeholder-slate-500"
+                    placeholder="拆解动作 (例: 下载SKU-01的所有主图)" autocomplete="off">
+                <button type="submit" 
+                    class="bg-blue-600 hover:bg-blue-500 text-white font-bold px-6 py-3 rounded-xl shadow-lg shadow-blue-500/30 transition-all transform active:scale-95 flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd" />
+                    </svg>
+                    添加
+                </button>
+            </form>
+        </div>
+
+        <!-- Task List Area -->
+        <div class="flex-1 overflow-y-auto p-6 scroll-smooth" id="task-container">
+            <!-- Empty state -->
+            <div id="empty-state" class="text-center py-10 flex flex-col items-center justify-center h-full text-slate-500">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 mb-4 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                </svg>
+                <p class="text-lg">没有任务。快设定一个荒谬的低门槛开始吧！</p>
+                <p class="text-sm mt-2">提示：不要写“上架100个商品”，写“打开后台登录页面”。</p>
+            </div>
+            
+            <ul id="task-list" class="space-y-3">
+                <!-- Tasks will be injected here via JS -->
+            </ul>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, getDoc, setDoc, updateDoc, onSnapshot, collection, addDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // --- Firebase Setup ---
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
+        
+        let auth, db, userId;
+
+        // --- State Management ---
+        let state = {
+            level: 1,
+            exp: 0,
+            expNeeded: 100,
+            tasks: [],
+            totalCompleted: 0
+        };
+
+        const quotes = [
+            "先上链接后精修，烂草稿也胜过零。",
+            "不看还有九十九，只盯眼前这一个。",
+            "货在仓库是成本，挂在网上才是钱。",
+            "早上一天卡身位，截流赚钱不排队。",
+            "只做五分钟，五分钟后允许放弃。"
+        ];
+
+        // DOM Elements
+        const taskForm = document.getElementById('task-form');
+        const taskInput = document.getElementById('task-input');
+        const taskList = document.getElementById('task-list');
+        const emptyState = document.getElementById('empty-state');
+        const expDisplay = document.getElementById('exp-display');
+        const expBar = document.getElementById('exp-bar');
+        const levelDisplay = document.getElementById('user-level');
+        const quoteDisplay = document.getElementById('motivational-quote');
+
+        // --- Audio System (Tone.js) ---
+        let synthsReady = false;
+        let popSynth, levelUpSynth;
+
+        async function initAudio() {
+            if (synthsReady) return;
+            await Tone.start();
+            
+            // Short, satisfying 'pop' or 'ding' for checking a task
+            popSynth = new Tone.PolySynth(Tone.Synth, {
+                oscillator: { type: "sine" },
+                envelope: { attack: 0.01, decay: 0.1, sustain: 0.1, release: 1 }
+            }).toDestination();
+            popSynth.volume.value = -10;
+
+            // Triumphant chord for level up
+            levelUpSynth = new Tone.PolySynth(Tone.Synth, {
+                oscillator: { type: "triangle" },
+                envelope: { attack: 0.05, decay: 0.2, sustain: 0.4, release: 1.5 }
+            }).toDestination();
+            levelUpSynth.volume.value = -5;
+
+            synthsReady = true;
+        }
+
+        function playPopSound() {
+            if (!synthsReady) initAudio();
+            if (synthsReady) {
+                // Play a quick upward interval
+                const now = Tone.now();
+                popSynth.triggerAttackRelease("E5", "8n", now);
+                popSynth.triggerAttackRelease("G5", "8n", now + 0.1);
+            }
+        }
+
+        function playLevelUpSound() {
+            if (!synthsReady) initAudio();
+            if (synthsReady) {
+                const now = Tone.now();
+                levelUpSynth.triggerAttackRelease(["C4", "E4", "G4", "C5"], "2n", now);
+                setTimeout(() => {
+                    levelUpSynth.triggerAttackRelease(["F4", "A4", "C5", "F5"], "1n", Tone.now());
+                }, 400);
+            }
+        }
+
+        // --- Particle System (Canvas) ---
+        const canvas = document.getElementById('fx-canvas');
+        const ctx = canvas.getContext('2d');
+        let particles = [];
+
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        class Particle {
+            constructor(x, y, color) {
+                this.x = x;
+                this.y = y;
+                // Burst velocity
+                const angle = Math.random() * Math.PI * 2;
+                const speed = Math.random() * 8 + 2;
+                this.vx = Math.cos(angle) * speed;
+                this.vy = Math.sin(angle) * speed;
+                this.life = 1.0; // 1.0 to 0.0
+                this.decay = Math.random() * 0.02 + 0.02;
+                this.color = color;
+                this.size = Math.random() * 4 + 2;
+                this.gravity = 0.2;
+            }
+            update() {
+                this.vy += this.gravity;
+                this.x += this.vx;
+                this.y += this.vy;
+                this.life -= this.decay;
+            }
+            draw() {
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fillStyle = `rgba(${this.color}, ${this.life})`;
+                ctx.fill();
+            }
+        }
+
+        function spawnParticles(x, y, count = 30) {
+            const colors = ['59, 130, 246', '16, 185, 129', '250, 204, 21', '168, 85, 247']; // Blue, Green, Yellow, Purple
+            for (let i = 0; i < count; i++) {
+                const color = colors[Math.floor(Math.random() * colors.length)];
+                particles.push(new Particle(x, y, color));
+            }
+        }
+
+        function animateParticles() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.update();
+                p.draw();
+                if (p.life <= 0) particles.splice(i, 1);
+            }
+            requestAnimationFrame(animateParticles);
+        }
+        animateParticles();
+
+        function spawnFloatingText(x, y, text) {
+            const el = document.createElement('div');
+            el.className = 'floating-text';
+            el.innerText = text;
+            el.style.left = `${x}px`;
+            el.style.top = `${y}px`;
+            document.body.appendChild(el);
+            setTimeout(() => el.remove(), 1000);
+        }
+
+        // --- Core Application Logic ---
+
+        function renderTasks() {
+            taskList.innerHTML = '';
+            if (state.tasks.length === 0) {
+                emptyState.style.display = 'flex';
+            } else {
+                emptyState.style.display = 'none';
+                // Sort tasks: uncompleted first, then newest first. completed at the bottom
+                const sortedTasks = [...state.tasks].sort((a, b) => {
+                    if (a.completed === b.completed) {
+                        return (b.createdAt || 0) - (a.createdAt || 0);
+                    }
+                    return a.completed ? 1 : -1;
+                });
+
+                sortedTasks.forEach(task => {
+                    const li = document.createElement('li');
+                    li.className = `task-item border border-slate-700 bg-slate-800 rounded-xl p-4 flex items-center gap-4 ${task.completed ? 'completed' : ''}`;
+                    li.innerHTML = `
+                        <input type="checkbox" class="game-checkbox flex-shrink-0" ${task.completed ? 'checked' : ''} data-id="${task.id}">
+                        <span class="text-lg font-medium ${task.completed ? 'text-slate-500' : 'text-slate-200'} flex-1 break-all">${task.text}</span>
+                        ${task.completed ? '<span class="text-xs font-bold text-emerald-500 bg-emerald-500/10 px-2 py-1 rounded">DONE</span>' : '<span class="text-xs font-bold text-blue-400 bg-blue-400/10 px-2 py-1 rounded">+50 EXP</span>'}
+                    `;
+                    taskList.appendChild(li);
+                });
+            }
+        }
+
+        function updateUI() {
+            levelDisplay.innerText = state.level;
+            expDisplay.innerText = `${state.exp} / ${state.expNeeded} EXP`;
+            const percentage = Math.min((state.exp / state.expNeeded) * 100, 100);
+            expBar.style.width = `${percentage}%`;
+        }
+
+        function rotateQuote() {
+            const quote = quotes[Math.floor(Math.random() * quotes.length)];
+            quoteDisplay.style.opacity = 0;
+            setTimeout(() => {
+                quoteDisplay.innerText = `"${quote}"`;
+                quoteDisplay.style.opacity = 1;
+                quoteDisplay.style.transition = 'opacity 0.5s ease';
+            }, 300);
+        }
+
+        function triggerLevelUpVisuals() {
+            // Level Up Visuals & Audio
+            playLevelUpSound();
+            spawnParticles(window.innerWidth / 2, window.innerHeight / 2, 200);
+            
+            // Add glowing animation to container
+            const container = document.querySelector('.max-w-2xl');
+            container.classList.add('level-up-anim');
+            
+            // Big text notification
+            const lvlUpText = document.createElement('div');
+            lvlUpText.innerHTML = `LEVEL UP! <br><span class="text-2xl text-white">你已达到 Lv.${state.level}</span>`;
+            lvlUpText.className = 'fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-6xl font-black text-yellow-400 text-center z-[10001] pointer-events-none drop-shadow-[0_0_20px_rgba(250,204,21,0.8)]';
+            document.body.appendChild(lvlUpText);
+            
+            setTimeout(() => {
+                container.classList.remove('level-up-anim');
+                lvlUpText.style.transition = 'opacity 1s ease';
+                lvlUpText.style.opacity = 0;
+                setTimeout(() => lvlUpText.remove(), 1000);
+            }, 2000);
+
+            rotateQuote();
+        }
+
+        async function completeTask(taskId, x, y) {
+            const task = state.tasks.find(t => t.id === taskId);
+            if (task && !task.completed) {
+                // Initialize audio context on first user interaction if not done
+                initAudio();
+                
+                // Immediate visual & audio feedback
+                playPopSound();
+                spawnParticles(x, y, 40);
+                const expGained = 50 + Math.floor(Math.random() * 10);
+                spawnFloatingText(x, y - 20, `+${expGained} EXP`);
+
+                if (!userId) {
+                    // Fallback to local memory if no DB connection
+                    task.completed = true;
+                    state.totalCompleted++;
+                    state.exp += expGained;
+                    if (state.exp >= state.expNeeded) {
+                        state.exp -= state.expNeeded;
+                        state.level++;
+                        state.expNeeded = Math.floor(state.expNeeded * 1.5);
+                        triggerLevelUpVisuals();
+                    }
+                    renderTasks();
+                    updateUI();
+                    return;
+                }
+
+                // Calculate new stats for Cloud Storage
+                let newExp = state.exp + expGained;
+                let newLevel = state.level;
+                let newExpNeeded = state.expNeeded;
+                let totalCompleted = state.totalCompleted + 1;
+
+                if (newExp >= newExpNeeded) {
+                    newExp = newExp - newExpNeeded;
+                    newLevel++;
+                    newExpNeeded = Math.floor(newExpNeeded * 1.5);
+                }
+
+                // Update Firestore (Optimistic UI handled by onSnapshot)
+                const taskRef = doc(db, 'artifacts', appId, 'users', userId, 'tasks', taskId);
+                updateDoc(taskRef, { completed: true });
+
+                const statsRef = doc(db, 'artifacts', appId, 'users', userId, 'stats', 'main');
+                updateDoc(statsRef, { 
+                    exp: newExp, 
+                    level: newLevel, 
+                    expNeeded: newExpNeeded,
+                    totalCompleted: totalCompleted
+                });
+
+            } else if (task && task.completed) {
+                if (userId) {
+                    const taskRef = doc(db, 'artifacts', appId, 'users', userId, 'tasks', taskId);
+                    updateDoc(taskRef, { completed: false });
+                } else {
+                    task.completed = false;
+                    renderTasks();
+                }
+            }
+        }
+
+        // --- Event Listeners ---
+        taskForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const text = taskInput.value.trim();
+            if (text) {
+                if (userId) {
+                    // Save to Cloud
+                    const tasksRef = collection(db, 'artifacts', appId, 'users', userId, 'tasks');
+                    await addDoc(tasksRef, { 
+                        text: text, 
+                        completed: false, 
+                        createdAt: Date.now() 
+                    });
+                } else {
+                    // Fallback local memory
+                    state.tasks.unshift({
+                        id: Date.now().toString(),
+                        text: text,
+                        completed: false,
+                        createdAt: Date.now()
+                    });
+                    renderTasks();
+                }
+                taskInput.value = '';
+                taskList.scrollTop = 0;
+            }
+        });
+
+        taskList.addEventListener('change', (e) => {
+            if (e.target.classList.contains('game-checkbox')) {
+                const taskId = e.target.getAttribute('data-id');
+                // Get coordinates of the checkbox for particles
+                const rect = e.target.getBoundingClientRect();
+                const x = rect.left + rect.width / 2;
+                const y = rect.top + rect.height / 2;
+                
+                completeTask(taskId, x, y);
+            }
+        });
+
+        // Any click on document can attempt to init audio
+        document.addEventListener('click', initAudio, { once: true });
+
+        // --- Database Initialization & Cloud Sync ---
+        async function initApp() {
+            if (firebaseConfig) {
+                const app = initializeApp(firebaseConfig);
+                auth = getAuth(app);
+                db = getFirestore(app);
+
+                try {
+                    // Authenticate User
+                    if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                        await signInWithCustomToken(auth, __initial_auth_token);
+                    } else {
+                        await signInAnonymously(auth);
+                    }
+                    
+                    userId = auth.currentUser?.uid;
+                    if (userId) {
+                        setupRealtimeListeners();
+                    }
+                } catch (error) {
+                    console.error("Cloud sync auth failed:", error);
+                    fallbackLocalInit();
+                }
+            } else {
+                fallbackLocalInit();
+            }
+        }
+
+        function setupRealtimeListeners() {
+            if (!userId || !db) return;
+            window.previousLevel = state.level;
+
+            // Listen to Stats (EXP & Level)
+            const statsRef = doc(db, 'artifacts', appId, 'users', userId, 'stats', 'main');
+            onSnapshot(statsRef, (docSnap) => {
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    state.level = data.level || 1;
+                    state.exp = data.exp || 0;
+                    state.expNeeded = data.expNeeded || 100;
+                    state.totalCompleted = data.totalCompleted || 0;
+                    
+                    // Trigger visual level up if level increased from cloud sync
+                    if (window.previousLevel && state.level > window.previousLevel) {
+                        triggerLevelUpVisuals();
+                    }
+                    window.previousLevel = state.level;
+                    updateUI();
+                } else {
+                    // Initialize cloud stats if new user
+                    setDoc(statsRef, { level: 1, exp: 0, expNeeded: 100, totalCompleted: 0 });
+                }
+            }, (error) => console.error("Stats sync error:", error));
+
+            // Listen to Tasks
+            const tasksRef = collection(db, 'artifacts', appId, 'users', userId, 'tasks');
+            onSnapshot(tasksRef, (snapshot) => {
+                state.tasks = [];
+                snapshot.forEach((doc) => {
+                    state.tasks.push({ id: doc.id, ...doc.data() });
+                });
+                renderTasks();
+            }, (error) => console.error("Tasks sync error:", error));
+        }
+
+        function fallbackLocalInit() {
+            updateUI();
+            renderTasks();
+        }
+
+        // Boot up
+        initApp();
+
+    </script>
+</body>
+</html>
